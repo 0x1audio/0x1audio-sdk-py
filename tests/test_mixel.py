@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import ox1audio as ox
+from ox1audio.cli.registry import client_name
 
 SRC = str(Path(ox.__file__).resolve().parents[1])
 
@@ -279,6 +280,9 @@ class RegistryTest(Scratch):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("CALM-RIVER-42", done.stdout)
         self.assertIn("Signed in as ada@example.com", done.stdout)
+        sent = next(body for path, body, _ in FakeRegistry.seen if path == "/api/v1/cli/login")
+        self.assertEqual(sent["client"], client_name())
+        self.assertRegex(sent["client"], r"^mixel \d+\.\d+\.\d+( on \S.*)?$")
         file = self.root / "config" / "mixel" / "credentials.json"
         self.assertEqual(oct(file.stat().st_mode & 0o777), "0o600")
         app = self.new_app()
@@ -325,6 +329,21 @@ class RegistryTest(Scratch):
         done = mixel("status", cwd=app, env={**self.env, "MIXEL_API": "http://127.0.0.1:9", "MIXEL_TOKEN": "x"})
         self.assertEqual(done.returncode, 4)
         self.assertIn("Couldn't reach Mixel at http://127.0.0.1:9", done.stderr)
+
+
+
+class ClientNameTest(unittest.TestCase):
+    """Account › Command line tells machines apart by this name (GAB-56)."""
+
+    def test_the_token_is_named_after_this_computer(self):
+        self.assertEqual(client_name("studio-mac.local"), f"mixel {ox.__version__} on studio-mac")
+        self.assertEqual(client_name(""), f"mixel {ox.__version__}")
+        self.assertEqual(client_name("bad\x07name"), f"mixel {ox.__version__} on badname")
+
+    def test_a_long_name_is_cut_to_what_the_cloud_keeps(self):
+        name = client_name("ä" * 80)
+        self.assertLessEqual(len(name.encode()), 60)
+        self.assertTrue(name.startswith(f"mixel {ox.__version__} on ä"))
 
 
 if __name__ == "__main__":

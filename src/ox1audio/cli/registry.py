@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
@@ -88,10 +89,28 @@ def problem(data: dict, fallback: str) -> Stop:
 # --- login ------------------------------------------------------------------------------------
 
 
+CLIENT_MAX = 60  # bytes; the cloud keeps longer names as plain "mixel"
+
+
+def client_name(host: str | None = None) -> str:
+    """How Account › Command line names this token: "mixel 0.3.0 on studio-mac", so machines differ."""
+    base = f"mixel {__version__}"
+    if host is None:
+        try:
+            host = socket.gethostname()
+        except OSError:
+            host = ""
+    host = "".join(ch for ch in host.split(".")[0] if ch.isprintable()).strip()
+    room = CLIENT_MAX - len(f"{base} on ".encode())
+    while host and len(host.encode()) > room:
+        host = host[:-1].rstrip()
+    return f"{base} on {host}" if host else base
+
+
 def login(args: list[str]) -> int:
     as_json = "--json" in args
     interactive = sys.stdout.isatty() and "--non-interactive" not in args and not as_json
-    status, data = call("POST", "/api/v1/cli/login", {"client": f"mixel {__version__}"}, signed=False, what="sign-in")
+    status, data = call("POST", "/api/v1/cli/login", {"client": client_name()}, signed=False, what="sign-in")
     if status >= 400 or not data.get("device_code"):
         raise problem(data, "Mixel couldn't start a sign-in.")
     code, url = data["user_code"], data["verification_url"]
