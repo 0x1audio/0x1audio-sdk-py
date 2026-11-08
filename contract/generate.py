@@ -12,6 +12,7 @@ Outputs:
     src/ox1audio/docs/*.md, llms.txt                mixel docs, the MCP server, the docs site
     ../0x1audio-sdk-ts/src/contract.gen.ts          page SDK types
     ../0x1audio-cloud/apps/desktop/electron/apps/contract.gen.ts   desktop host types and rules
+    ../0x1audio-cloud/apps/desktop/schema/app.schema.json          the editor schema
     ../0x1audio-{converter-app,hello-world-py-module}/AGENTS.md    official apps' copies (when present)
 
 Every generated file is also checked for install lines that would run a stranger's package.
@@ -174,7 +175,7 @@ export interface ErrorBody {{
     if "desktop" in where.lower():
         shared += f"""
 // app.json rules (the desktop's schema.ts reads these; a test fails if they drift).
-export const manifestRules = {json.dumps({k: r[k] for k in ("FIELDS", "NAME_PATTERN", "VERSION_PATTERN", "SDK_PATTERN", "ACCENT_PATTERN", "HOST_PATTERN", "REASON_LENGTH", "WINDOW", "TAGS_MAX")}, indent=2)} as const
+export const manifestRules = {json.dumps({k: r[k] for k in ("FIELDS", "NAME_PATTERN", "NAME_LENGTH", "DISPLAY_NAME_MAX", "SUMMARY_MAX", "VERSION_PATTERN", "SDK_PATTERN", "ACCENT_PATTERN", "HOST_PATTERN", "HOSTS_MAX", "REASON_LENGTH", "WINDOW", "TAGS_MAX")}, indent=2)} as const
 
 export const limits = {{ line: {c['protocol']['lineLimit']}, result: {c['protocol']['resultLimit']}, event: {c['protocol']['eventLimit']}, progressPerSecond: {c['protocol']['progressPerSecond']} }} as const
 """
@@ -271,6 +272,9 @@ def outputs() -> dict[Path, str]:
         pkg / "docs" / "digest.md": (HERE / "digest.md").read_text(),
         pkg / "app.schema.json": json.dumps(c["schema"], indent=2, ensure_ascii=False) + "\n",
     }
+    editor = PROJECTS / "0x1audio-cloud" / "apps" / "desktop" / "schema" / "app.schema.json"
+    if editor.parent.is_dir():
+        found[editor] = json.dumps(c["schema"], indent=2, ensure_ascii=False) + "\n"
     ts = PROJECTS / "0x1audio-sdk-ts" / "src"
     if ts.is_dir():
         found[ts / "contract.gen.ts"] = typescript(c, "Page SDK copy.")
