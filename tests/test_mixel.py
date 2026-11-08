@@ -127,6 +127,45 @@ class TestAndRunTest(Scratch):
         self.assertTrue(result["items"][0]["path"].endswith(".flac"))
         self.assertGreater(result["progress_calls"], 0)
 
+    def test_run_keeps_the_files_and_out_copies_them(self):
+        app = self.new_app()
+        out = self.root / "heard"
+        done = mixel("run", "convert", "--file", "tests/tone.wav", "--set", "format=flac", "--out", str(out), cwd=app)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertTrue((out / "tone.flac").is_file())
+        self.assertIn("The files stay where they are", done.stdout)
+        wrong = mixel("run", "nope", "--file", "tests/tone.wav", cwd=app)
+        self.assertIn("no_such_action", wrong.stdout)
+
+    def test_check_and_test_load_the_app_with_its_venv(self):
+        app = self.new_app()
+        venv = app / ".venv"
+        subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(venv)], check=True)
+        site = next(venv.glob("lib/python*/site-packages"))
+        (site / "only_in_the_venv.py").write_text("VALUE = 1\n")
+        (app / "app.py").write_text("import only_in_the_venv\n" + (app / "app.py").read_text())
+        pyproject = app / "pyproject.toml"
+        pyproject.write_text(pyproject.read_text().replace("dependencies = []", 'dependencies = ["only-in-the-venv"]'))
+        done = mixel("check", cwd=app)
+        self.assertEqual(done.returncode, 0, done.stdout)
+        tested = mixel("test", cwd=app)
+        self.assertEqual(tested.returncode, 0, tested.stdout + tested.stderr)
+
+    def test_fix_adds_a_missing_package_and_flags_todo_reasons(self):
+        app = self.new_app()
+        (app / "app.py").write_text("import yaml\n" + (app / "app.py").read_text())
+        fixed = mixel("check", "--fix", cwd=app)
+        self.assertIn("Fixed  pyproject.toml lists pyyaml now", fixed.stdout)
+        self.assertIn('"pyyaml"', (app / "pyproject.toml").read_text())
+        (app / "app.py").write_text((app / "app.py").read_text().replace("import yaml\n", ""))
+        data = json.loads((app / "app.json").read_text())
+        del data["permissions"]["library"]
+        (app / "app.json").write_text(json.dumps(data))
+        mixel("check", "--fix", cwd=app)
+        self.assertTrue(json.loads((app / "app.json").read_text())["permissions"]["library"].startswith("TODO"))
+        strict = mixel("check", "--strict", cwd=app)
+        self.assertIn("The reason for library is still a TODO.", strict.stdout)
+
     def test_run_names_the_controls_when_input_is_missing(self):
         app = self.new_app()
         done = mixel("run", "convert", cwd=app)

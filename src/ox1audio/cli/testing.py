@@ -41,8 +41,7 @@ def run(folder: Path, pattern: str | None = None) -> dict:
             "code": "no_tests", "message": "There is no tests/ folder.", "fix": "add tests/test_app.py with a unittest that calls ox.test(...)",
             "doc": f"{out.DOCS}/actions#testing"}}
     python = interpreter(folder)
-    sdk = str(Path(__file__).resolve().parents[2])
-    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [sdk, os.environ.get("PYTHONPATH", "")])), "PYTHONDONTWRITEBYTECODE": "1"}
+    env = app_env(python)
     with tempfile.TemporaryDirectory() as scratch:
         target = Path(scratch) / "result.json"
         command = [python, "-m", "ox1audio.cli._testrun", str(target), *(["-k", pattern] if pattern else [])]
@@ -57,7 +56,7 @@ def run(folder: Path, pattern: str | None = None) -> dict:
     for item in failed:
         if item.get("missing"):
             name = item["missing"]
-            item["fix"] = f"{name} isn't installed where the tests run. Add it to pyproject.toml › [project].dependencies, then: uv venv && uv pip install -r pyproject.toml (mixel test then uses .venv)"
+            item["fix"] = f"{name} isn't installed where the tests run. List it in pyproject.toml › [project].dependencies (mixel check --fix does), then: uv venv && uv pip install -r pyproject.toml"
     found = bool(result["passed"] or failed or result["skipped"])
     output = (done.stdout + done.stderr).strip().splitlines()
     return {
@@ -80,6 +79,18 @@ def interpreter(folder: Path) -> str:
         if candidate.is_file():
             return str(candidate)
     return sys.executable
+
+
+def app_env(python: str) -> dict:
+    """The environment for running app code with ``python``: this SDK first, then its own packages
+    (ffmpeg, the HTTP client) when the app's .venv doesn't have them. The app's packages come from its .venv."""
+    sdk = str(Path(__file__).resolve().parents[2])
+    paths = [sdk]
+    if python != sys.executable:
+        # Every site-packages mixel itself sees (including ones a .pth file adds), after the SDK.
+        paths += [entry for entry in sys.path if entry.endswith(("site-packages", "dist-packages")) and Path(entry).is_dir() and entry not in paths]
+    current = os.environ.get("PYTHONPATH", "")
+    return {**os.environ, "PYTHONPATH": os.pathsep.join(paths + ([current] if current else [])), "PYTHONDONTWRITEBYTECODE": "1"}
 
 
 def show(result: dict) -> None:

@@ -19,7 +19,7 @@ _SECTIONS = [
     ("Check", [
         ("check", "the rules Mixel and its reviewers apply", "--fix --strict --json"),
         ("test", "run the tests in tests/", "-k NAME --json"),
-        ("run ACTION", "run one action here", "--file PATH --set NAME=VALUE --json"),
+        ("run ACTION", "run one action here", "--file PATH --set NAME=VALUE --out FOLDER --json"),
     ]),
     ("Publish", [
         ("login", "sign in with your Mixel account", ""),
@@ -47,6 +47,15 @@ def _help() -> str:
 
 
 HELP = _help()
+
+
+def _command_help(command: str) -> str:
+    for _, items in _SECTIONS:
+        for name, text, flags in items:
+            if name.split()[0] == command:
+                usage = f"mixel {name}" + (f" [{flags.replace(' --', '] [--').replace(' -k', '] [-k')}]" if flags else "")
+                return f"{usage}\n  {text}\n\nDocs: mixel docs cli\n"
+    return HELP
 
 COMMANDS = {
     "new": "ox1audio.cli.new",
@@ -95,7 +104,7 @@ def dispatch(args: list[str]) -> int:
             near = [name for name in COMMANDS if name.startswith(command[:2])]
             raise Stop(f"mixel {command} is not a command.", fix=f"mixel {near[0]}" if near else "mixel --help")
         if {"-h", "--help"} & set(rest):
-            print(HELP, end="")
+            print(_command_help(command), end="")
             return OK
         import importlib
 

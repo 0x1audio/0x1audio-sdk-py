@@ -8,18 +8,27 @@ from ox1audio.cli import out
 from ox1audio.cli.out import OK, Stop
 
 FOLDER = Path(__file__).resolve().parents[1] / "docs"
+DOCS_PREFIX = "https://docs.0x1audio.com/"
 
 
 def topics() -> dict[str, str]:
     """slug -> first heading, for every page shipped with the SDK."""
     found = {}
     for path in sorted(FOLDER.glob("*.md")):
+        if path.stem == "digest":
+            continue
         first = next((line.lstrip("# ").strip() for line in path.read_text().splitlines() if line.startswith("#")), path.stem)
         found[path.stem] = first
     return found
 
 
+# The docs site's pages that live inside another page offline (error links say "actions#…").
+ALIASES = {"actions": "agents", "page": "agents", "start": "agents", "app-json": "app-json", "sdk": "app-json", "v1": "app-json", "fields": "app-json", "network": "permissions", "publish": "cli"}
+
+
 def read(slug: str) -> str:
+    slug = slug.split("#", 1)[0].removeprefix(DOCS_PREFIX).strip("/")
+    slug = ALIASES.get(slug, slug)
     path = FOLDER / f"{slug}.md"
     if not path.is_file():
         names = ", ".join(topics()) or "none"

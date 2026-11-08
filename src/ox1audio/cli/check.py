@@ -102,7 +102,7 @@ def _run(folder: Path) -> Report:
     worker = data.get("worker")
     entry = data.get("entry") or (worker.get("entry") if isinstance(worker, dict) else None)
     if isinstance(entry, str) and (folder / entry).is_file():
-        loaded, problem = _load(folder / entry)
+        loaded, problem = _load_in_app(folder, folder / entry)
         if problem:
             report.findings.append(problem)
         else:
@@ -120,26 +120,89 @@ def _run(folder: Path) -> Report:
                         f"The code uses {code} ({_why_used(code)}), but app.json doesn't ask for it.",
                         f'add "{code}": "{_reason(code)}" to permissions (or run mixel check --fix), then say why in your own words', "permissions",
                     ))
+                permissions = data.get("permissions") if isinstance(data.get("permissions"), dict) else {}
+                for code, reason in permissions.items():
+                    if isinstance(reason, str) and reason.strip().upper().startswith("TODO"):
+                        report.findings.append(Finding("permission_reason", f"app.json › permissions.{code}", f"The reason for {code} is still a TODO.", f'write it for the person, like "{_reason(code)}"; they read it before they install', "permissions", "warn"))
                 for code in sorted(declared - used - {"network"}):
                     report.findings.append(Finding("permission_unused", f"app.json › permissions.{code}", f"app.json asks for {code}, but the code doesn't seem to use it.", "remove it, so people aren't asked for more than the app needs", "permissions", "warn"))
     return report
 
 
+class Loaded:
+    """An action as the app's own Python described it."""
+
+    def __init__(self, spec: dict, permissions: list[str]) -> None:
+        self.name = spec["name"]
+        self._spec = spec
+        self._permissions = set(permissions)
+
+    def spec(self) -> dict:
+        return self._spec
+
+    def permissions(self) -> set[str]:
+        return self._permissions
+
+
+def _load_in_app(folder: Path, entry: Path):
+    """Load the actions with the app's Python (its .venv, else mixel's), so its packages are there."""
+    import subprocess
+
+    from ox1audio.cli.testing import app_env, interpreter
+
+    python = interpreter(folder)
+    done = subprocess.run([python, "-m", "ox1audio.cli._describe", str(entry)], cwd=folder, env=app_env(python), capture_output=True, text=True, timeout=300)
+    try:
+        body = json.loads(done.stdout.strip().splitlines()[-1])
+    except (IndexError, ValueError):
+        tail = (done.stderr.strip().splitlines() or ["no output"])[-1]
+        return [], Finding("app_failed_to_load", entry.name, f"{entry.name} couldn't be loaded: {tail}", "run python app.py to see the whole error", "actions#an-action")
+    if "finding" in body:
+        return [], Finding(**body["finding"])
+    return [Loaded(item["spec"], item["permissions"]) for item in body["actions"]], None
+
+
+def _todo(code: str) -> str:
+    return f"TODO: say why the app needs {code}, in one sentence."
+
+
 def _fix(folder: Path, report: Report) -> list[str]:
-    """Add each permission the code uses and app.json lacks, with a reason to rewrite."""
+    """Add each permission the code uses (with a reason to rewrite) and each package it imports."""
+    fixed = _fix_dependencies(folder, report)
     missing = [item.where.rsplit(".", 1)[-1] for item in report.findings if item.code == "permission_undeclared"]
     if not missing:
-        return []
+        return fixed
     path = folder / "app.json"
     data = json.loads(path.read_text())
     permissions = data.get("permissions")
     if not isinstance(permissions, dict):
         permissions = {}
     for code in missing:
-        permissions[code] = _reason(code)
+        permissions[code] = _todo(code)
     data["permissions"] = permissions
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-    return [f"permissions.{code} added: rewrite the reason, people read it before they install" for code in missing]
+    return fixed + [f"permissions.{code} added with a TODO reason: write it, people read it before they install" for code in missing]
+
+
+def _fix_dependencies(folder: Path, report: Report) -> list[str]:
+    names = []
+    for item in report.findings:
+        if item.code == "dependency_missing" and item.severity == "error":
+            found = re.search(r'add "([^"]+)" to pyproject', item.fix)
+            if found and found.group(1) not in names:
+                names.append(found.group(1))
+    if not names:
+        return []
+    path = folder / "pyproject.toml"
+    text = path.read_text() if path.is_file() else f'[project]\nname = "{folder.name}"\nversion = "0.1.0"\nrequires-python = ">=3.11"\ndependencies = []\n'
+    match = re.search(r"(?ms)^\[project\].*?^dependencies\s*=\s*\[(.*?)\]", text)
+    if not match:
+        return []
+    current = [part.strip() for part in match.group(1).split(",") if part.strip()]
+    current += [f'"{name}"' for name in names]
+    text = text[: match.start(1)] + ", ".join(current) + text[match.end(1):]
+    path.write_text(text)
+    return [f"pyproject.toml lists {name} now: install it with uv venv && uv pip install -r pyproject.toml" for name in names]
 
 
 def _load(entry: Path):
@@ -156,7 +219,7 @@ def _load(entry: Path):
     except ModuleNotFoundError as exc:
         missing = (exc.name or "").split(".")[0]
         if missing and _normal(_dist_names.get(missing, missing)) in _declared(entry.parent):
-            return [], Finding("dependency_not_installed", entry.name, f"{missing} is in pyproject.toml but not installed here, so the actions couldn't be checked.", f"install the app's packages where you run ox: uv pip install {_dist_names.get(missing, missing)}", "actions#dependencies")
+            return [], Finding("dependency_not_installed", entry.name, f"{missing} is in pyproject.toml but not installed, so the actions couldn't be checked.", "uv venv && uv pip install -r pyproject.toml   (mixel check, test and run use the app's .venv)", "actions#dependencies")
         return [], Finding("dependency_missing", f"{entry.name}{_line_of(exc, entry)}", f"{entry.name} imports {missing}, but pyproject.toml doesn't list it, so 0x1audio won't install it.", f'add "{_dist_names.get(missing, missing)}" to pyproject.toml › [project].dependencies', "actions#dependencies")
     except Exception as exc:  # noqa: BLE001 - every failure is reported as a finding
         text = str(exc)

@@ -4,7 +4,7 @@ This folder is one app: Python actions that 0x1audio runs on the person's comput
 
 ## Loop
 1. Edit `app.py`. If what the code touches changes, update `app.json` › `permissions`.
-2. `mixel check` until it reports no errors. Each error ends with a `fix:` line; do that. `--fix` adds missing permissions.
+2. `mixel check` until it reports no errors. Each error ends with a `fix:` line; do that. `--fix` adds missing permissions and packages.
 3. `mixel test` runs `tests/`. `mixel run ACTION --file song.wav --set NAME=VALUE` runs one action on a real file.
 4. `mixel dev` opens the app in 0x1audio and reloads it on save. Never `mixel publish`, or change permissions, unless the person asks.
 
@@ -47,7 +47,7 @@ class ConvertTest(unittest.TestCase):
 | --- | --- |
 | File info | `ox.audio.probe(path)` → `.rate .channels .duration .codec` |
 | Another format | `ox.audio.convert(path, "wav" / "aiff" / "flac" / "mp3" / "aac" / "ogg" / "opus", folder=None, bits=None)` → `Path` (lossless keeps the source's bit depth) |
-| Samples (numpy) | `ox.audio.read(path)` → `(samples, rate)`, float32 shaped `(frames, channels)`; `ox.audio.write(samples, rate, "wav", folder=None, name="audio")` → `Path` |
+| Samples (numpy) | `ox.audio.read(path)` → `(samples, rate)`, float32 shaped `(frames, channels)`; `ox.audio.write(samples, rate, "wav", folder=None, name="audio")` → `Path` (24-bit) |
 | A folder for new files | `ox.temp()` → an empty folder, removed when the app closes. `folder=None` above uses one. |
 | The app's own files | `ox.data.read / read_text / write / list / remove("presets/a.json")` (needs `data`) |
 
@@ -73,7 +73,7 @@ class ConvertTest(unittest.TestCase):
 - Raise `version` before each release. Never change `name`.
 
 ## Dependencies
-Python packages go in `pyproject.toml` › `[project].dependencies`, wheels only; 0x1audio installs only those (`mixel check` finds missing ones). numpy, scipy and soundfile are fine. The SDK already has ffmpeg; don't add ffmpeg wrappers, pydub, or requests. Never commit models, audio, or files over 5 MB.
+Python packages go in `pyproject.toml` › `[project].dependencies`, wheels only; 0x1audio installs only those (`mixel check --fix` adds what the code imports; then `uv venv && uv pip install -r pyproject.toml`, which mixel uses). numpy, scipy and soundfile are fine. The SDK already has ffmpeg; don't add ffmpeg wrappers, pydub, or requests. Never commit models, songs, or files over 5 MB (a short test tone is fine).
 
 ## A page (only when the drawn form is not enough)
 A Vite + React page built to `dist/index.html`, set as `"page"`. It uses `@0x1audio/design-system` and calls the same actions:
@@ -86,7 +86,7 @@ export const App = () => <ActionForm action="convert" />   // the form 0x1audio 
 ```
 Page API: `ox.run`, `ox.actions`, `ox.files.pick / fromDrop / read / reveal`, `ox.library.list / add / file / onChange`, `ox.data.*`, `ox.app.open`. Errors are `OxError` with `.code` (`cancelled` after Stop, with `.kept`). `ox.emit("partial", body)` in Python reaches `onEvent`. Use design-system components and tokens only, no hex colours; light and dark both work.
 
-## Words
+## Words (what the person sees)
 Say what it does for a musician: song, sound, file, folder, Library. Never: worker, manifest, SDK, ffmpeg. Sentence case. Buttons are verbs. No exclamation marks. Errors say what happened, then what to do.
 
 ## Never

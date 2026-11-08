@@ -16,6 +16,7 @@ from pathlib import Path
 
 def main(argv: list[str]) -> int:
     entry, name, given = Path(argv[0]).resolve(), argv[1], json.loads(argv[2])
+    out = Path(argv[3]) if len(argv) > 3 else None
     report = sys.stdout
     sys.stdout = sys.stderr
 
@@ -64,6 +65,7 @@ def main(argv: list[str]) -> int:
             send({"type": "progress", "fraction": fraction, "label": label})
 
         result = call(act, given, cancel=threading.Event(), report=on_progress, send=lambda event, body: send({"type": "event", "name": event, "body": body}))
+        _keep(items, out)
         send({"type": "done", "result": result, "items": items, "progress_calls": progress})
         return 0
     except Problem as problem:
@@ -81,6 +83,27 @@ def main(argv: list[str]) -> int:
         where = f"{Path(frames[-1].filename).name}:{frames[-1].lineno}" if frames else ""
         send({"type": "error", "error": {"code": "crashed", "message": f"{type(exc).__name__}: {exc}", "where": where, "fix": "fix the error at that line; the traceback is above"}, "items": items})
     return 1
+
+
+def _keep(items: list[dict], out: Path | None) -> None:
+    """In Mixel the results are copied into the Library; here they stay on disk so you can listen."""
+    import shutil
+
+    from ox1audio.action import _temps
+
+    _temps.clear()  # ox.temp() folders survive this run
+    if out is None:
+        return
+    out.mkdir(parents=True, exist_ok=True)
+    for item in items:
+        source = Path(item["path"])
+        target = out / source.name
+        number = 2
+        while target.exists():
+            target = out / f"{source.stem} {number}{source.suffix}"
+            number += 1
+        shutil.copy2(source, target)
+        item["path"] = str(target)
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ Install or update it with `uv tool install ox1audio`. It runs on macOS, Linux an
 | --- | --- | --- |
 | `mixel check` | the rules Mixel and its reviewers apply | `--fix --strict --json` |
 | `mixel test` | run the tests in tests/ | `-k NAME --json` |
-| `mixel run ACTION` | run one action here | `--file PATH --set NAME=VALUE --json` |
+| `mixel run ACTION` | run one action here | `--file PATH --set NAME=VALUE --out FOLDER --json` |
 
 ## Publish
 

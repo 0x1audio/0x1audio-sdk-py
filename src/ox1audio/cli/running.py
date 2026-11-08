@@ -9,25 +9,28 @@ from pathlib import Path
 
 from ox1audio.cli import out
 from ox1audio.cli.out import FAILED, OK, Stop
-from ox1audio.cli.testing import interpreter
+from ox1audio.cli.testing import app_env, interpreter
 
-USAGE = "mixel run ACTION [--file PATH ...] [--set NAME=VALUE ...] [--json]"
+USAGE = "mixel run ACTION [--file PATH ...] [--set NAME=VALUE ...] [--out FOLDER] [--json]"
 
 
 def command(args: list[str]) -> int:
     as_json = "--json" in args
     files: list[str] = []
+    out_dir: str | None = None
     values: dict[str, object] = {}
     positional: list[str] = []
     i = 0
     while i < len(args):
         arg = args[i]
-        if arg in {"--file", "--set"}:
+        if arg in {"--file", "--set", "--out"}:
             if i + 1 >= len(args):
                 raise Stop(f"{arg} needs a value.", fix=USAGE)
             value = args[i + 1]
             if arg == "--file":
                 files.append(str(Path(value).resolve()))
+            elif arg == "--out":
+                out_dir = str(Path(value).resolve())
             else:
                 name, sep, raw = value.partition("=")
                 if not sep or not name:
@@ -40,7 +43,7 @@ def command(args: list[str]) -> int:
         i += 1
     if not positional:
         raise Stop("mixel run needs an action name.", fix=USAGE)
-    result = run(Path.cwd(), positional[0], values, files, live=not as_json)
+    result = run(Path.cwd(), positional[0], values, files, live=not as_json, out=out_dir)
     if as_json:
         out.emit(result)
     else:
@@ -55,8 +58,11 @@ def _value(raw: str) -> object:
         return raw
 
 
-def run(folder: Path, action: str, values: dict | None = None, files: list[str] | None = None, live: bool = False) -> dict:
-    """Run ``action`` from the app in ``folder``. --file paths fill the action's Files control."""
+def run(folder: Path, action: str, values: dict | None = None, files: list[str] | None = None, live: bool = False, out: str | None = None) -> dict:
+    """Run ``action`` from the app in ``folder``. --file paths fill the action's Files control.
+
+    What the action makes stays on disk (it would go to the Library); ``out`` copies it to a folder.
+    """
     from ox1audio.manifest import check as manifest
 
     folder = folder.resolve()
@@ -67,15 +73,16 @@ def run(folder: Path, action: str, values: dict | None = None, files: list[str] 
     given = dict(values or {})
     if files:
         control = _files_control(folder / entry, action)
+        if control == ("", False):
+            return {"ok": False, "error": {"code": "no_such_action", "message": f"{entry} has no action called {action}.", "fix": "mixel check lists the actions"}}
         if control is None:
             return {"ok": False, "error": {"code": "bad_input", "message": f"{action} has no Files control for --file.", "fix": "use --set NAME=VALUE"}}
         name, multiple = control
         given.setdefault(name, files if multiple else files[0])
-    sdk = str(Path(__file__).resolve().parents[2])
-    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [sdk, os.environ.get("PYTHONPATH", "")])), "PYTHONDONTWRITEBYTECODE": "1"}
+    python = interpreter(folder)
     process = subprocess.Popen(
-        [interpreter(folder), "-m", "ox1audio.cli._actionrun", str(folder / entry), action, json.dumps(given)],
-        cwd=folder, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        [python, "-m", "ox1audio.cli._actionrun", str(folder / entry), action, json.dumps(given), *([out] if out else [])],
+        cwd=folder, env=app_env(python), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
     final: dict = {}
     events: list = []
@@ -117,7 +124,8 @@ def _files_control(entry: Path, action: str) -> tuple[str, bool] | None:
                 text = ast.unparse(arg.annotation) if arg.annotation is not None else ""
                 if "Files(" in text:
                     return arg.arg, "multiple=False" not in text.replace(" ", "")
-    return None
+            return None
+    return "", False
 
 
 def show(result: dict) -> None:
@@ -138,6 +146,7 @@ def show(result: dict) -> None:
             meta = item.get("metadata") or {}
             detail = f"  {meta['duration']:.1f} s" if isinstance(meta.get("duration"), (int, float)) else ""
             print(f"  {item['kind']:<6} {item['title']}{detail}  {item['path']}")
+        print("The files stay where they are, for you to listen to; delete them when you're done.")
     elif result["result"] is not None:
         print("Result  " + (result["result"] if isinstance(result["result"], str) else json.dumps(result["result"])[:500]))
     else:
