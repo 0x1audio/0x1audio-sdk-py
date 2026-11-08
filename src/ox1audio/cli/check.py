@@ -1,235 +1,145 @@
-"""The ox command: start an app, and check it the way 0x1audio will."""
+"""mixel check: the one gate. The same rules Mixel applies when it opens an app, and the registry on submit."""
 
 from __future__ import annotations
 
 import importlib.util
-import io
 import json
-import math
 import re
-import struct
 import sys
-import wave
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from ox1audio import __version__
-from ox1audio.manifest import SCHEMA, Finding, check as check_manifest
-
-DOCS = "https://docs.0x1audio.com"
-
-HELP = f"""ox {__version__}: build 0x1audio apps
-
-  ox new "My App"   start an app in ./my-app
-  ox check          check app.json and the actions in this folder
-
-Docs: {DOCS}
-"""
-
-APP = '''import ox1audio as ox
+from ox1audio.cli import out
+from ox1audio.cli.out import FAILED, OK, Stop
+from ox1audio.manifest import Finding, check as check_manifest
 
 
-@ox.action("Convert")
-def convert(files: ox.Files("audio"), format: ox.Choice("wav", "flac", "mp3") = "wav"):
-    made = []
-    for i, path in enumerate(files):
-        ox.progress(i / len(files), path.name)
-        out = ox.audio.convert(path, format)
-        made.append(ox.sound(out, title=path.stem))
-    return made
-'''
+@dataclass
+class Report:
+    folder: Path
+    data: dict
+    findings: list[Finding] = field(default_factory=list)
+    actions: list = field(default_factory=list)
+    fixed: list[str] = field(default_factory=list)
 
-TEST = '''import unittest
-from pathlib import Path
+    @property
+    def errors(self) -> list[Finding]:
+        return [item for item in self.findings if item.severity == "error"]
 
-import ox1audio as ox
+    @property
+    def warnings(self) -> list[Finding]:
+        return [item for item in self.findings if item.severity != "error"]
 
-import app
+    def ok(self, strict: bool = False) -> bool:
+        return not self.errors and not (strict and self.warnings)
 
-TONE = Path(__file__).with_name("tone.wav")
-
-
-class AppTest(unittest.TestCase):
-    def test_convert_makes_a_copy_for_the_library(self):
-        run = ox.test(app.convert, files=[TONE], format="flac")
-        self.assertEqual(run["items"][0]["title"], "tone")
-        self.assertTrue(run["items"][0]["path"].endswith(".flac"))
-
-
-if __name__ == "__main__":
-    unittest.main()
-'''
-
-GITIGNORE = """__pycache__/
-*.py[cod]
-.venv/
-node_modules/
-"""
-
-PYPROJECT = """[project]
-name = "{slug}"
-version = "0.1.0"
-requires-python = ">=3.11"
-dependencies = []
-"""
-
-README = """# {title}
-
-{summary}
-
-A 0x1audio app. `app.py` holds its actions; `AGENTS.md` explains how to build it.
-
-```sh
-ox check
-python -m unittest
-```
-"""
+    def json(self, strict: bool = False) -> dict:
+        return {
+            "ok": self.ok(strict),
+            "app": self.data.get("name") or self.folder.name,
+            "version": self.data.get("version"),
+            "errors": [item.json() for item in self.errors][:20],
+            "warnings": [item.json() for item in self.warnings][:20],
+            "actions": [item.name for item in self.actions],
+            **({"fixed": self.fixed} if self.fixed else {}),
+        }
 
 
-def main(argv: list[str] | None = None) -> None:
-    args = list(sys.argv[1:] if argv is None else argv)
-    if not args or args[0] in {"-h", "--help", "help"}:
-        print(HELP, end="")
+def command(args: list[str]) -> int:
+    flags = {arg for arg in args if arg.startswith("--")}
+    unknown = flags - {"--json", "--strict", "--fix"}
+    if unknown:
+        raise Stop(f"mixel check has no option {sorted(unknown)[0]}.", fix="mixel check [folder] [--fix] [--strict] [--json]")
+    paths = [arg for arg in args if not arg.startswith("--")]
+    folder = Path(paths[0]) if paths else Path.cwd()
+    if not folder.is_dir():
+        raise Stop(f"{folder} is not a folder.", fix="run mixel check inside the app's folder, or give its path")
+    report = run(folder, fix="--fix" in flags)
+    strict = "--strict" in flags
+    if "--json" in flags:
+        out.emit(report.json(strict))
+    else:
+        show(report, strict)
+    return OK if report.ok(strict) else FAILED
+
+
+def show(report: Report, strict: bool = False) -> None:
+    data = report.data
+    title = f"{data.get('name') or report.folder.name} {data.get('version') or ''}".strip()
+    print(f"Checking {title} (sdk {data.get('sdk', 'missing')})\n")
+    for line in report.fixed:
+        print(f"Fixed  {line}")
+    if report.fixed:
+        print()
+    out.findings(report.findings)
+    errors, warnings = report.errors, report.warnings
+    if errors or (strict and warnings):
+        failing = errors + (warnings if strict else [])
+        tail = f", {out.count(len(warnings), 'warning')}" if warnings and not strict else ""
+        print(f"{out.count(len(failing), 'error' if not strict else 'problem')}{tail}. Fix {'them' if len(failing) > 1 else 'it'}, then run mixel check again.")
         return
-    command, rest = args[0], args[1:]
-    if command == "new":
-        title = " ".join(rest).strip()
-        if not title:
-            _usage('ox new needs a name, like ox new "Make It Louder".')
-        raise SystemExit(new(Path.cwd() / _slug(title), title))
-    if command == "check":
-        raise SystemExit(check(Path(rest[0]) if rest else Path.cwd()))
-    if command == "eject":
-        _usage(
-            "ox eject is gone: a page now builds around the same form 0x1audio draws.",
-            fix='add a Vite page that renders <ActionForm action="..."/> from @0x1audio/design-system, and set "page": "dist/index.html"',
-            doc="page",
-        )
-    _usage(f"ox {command} is not a command.", fix="run ox --help")
+    names = [item.name for item in report.actions]
+    actions = f"{out.count(len(names), 'action')}: {', '.join(names)}" if names else "no actions"
+    print(f"No errors{', ' + out.count(len(warnings), 'warning') if warnings else ''}. {actions}.")
 
 
-def _usage(message: str, fix: str = "", doc: str = "") -> None:
-    lines = [message]
-    if fix:
-        lines.append(f"fix:  {fix}")
-    if doc:
-        lines.append(f"docs: {DOCS}/{doc}")
-    print("\n".join(lines), file=sys.stderr)
-    raise SystemExit(2)
-
-
-def new(directory: Path, title: str) -> int:
-    if directory.exists() and any(directory.iterdir()):
-        print(f"{directory.name}/ already has files in it. Choose another name.", file=sys.stderr)
-        return 1
-    slug = directory.name
-    summary = "Convert songs to another format."
-    files = {
-        "app.py": APP,
-        "app.json": json.dumps({
-            "$schema": SCHEMA,
-            "name": slug,
-            "displayName": title[:48],
-            "summary": summary,
-            "version": "0.1.0",
-            "sdk": f"^{'.'.join(__version__.split('.')[:2])}",
-            "entry": "app.py",
-            "permissions": {
-                "files": "Open the songs you choose.",
-                "library": "Save the converted copies to your Library.",
-            },
-        }, indent=2) + "\n",
-        "AGENTS.md": agents_md(),
-        "tests/__init__.py": "",
-        "tests/test_app.py": TEST,
-        "pyproject.toml": PYPROJECT.format(slug=slug),
-        "README.md": README.format(title=title, summary=summary),
-        ".gitignore": GITIGNORE,
-    }
-    for name, body in files.items():
-        target = directory / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(body)
-    (directory / "tests" / "tone.wav").write_bytes(tone())
-    print(f"Created {slug}/")
-    width = max(len(name) for name in files)
-    notes = {
-        "app.py": "one action, convert: change it into yours",
-        "app.json": "name, summary, permissions (rewrite the words for your app)",
-        "AGENTS.md": "the whole API, for you and your coding agent",
-        "tests/test_app.py": "runs convert on tests/tone.wav",
-        "pyproject.toml": "Python packages your app needs",
-        "README.md": "what the app does",
-        ".gitignore": "",
-    }
-    width = max(len(name) for name in notes)
-    for name, note in notes.items():
-        print(f"  {name.ljust(width)}  {note}".rstrip())
-    print(f"Next\n  cd {slug}\n  ox check")
-    return 0
-
-
-def agents_md() -> str:
-    return (Path(__file__).with_name("AGENTS.md")).read_text()
-
-
-def tone(seconds: float = 0.5, rate: int = 44100) -> bytes:
-    """A quiet 440 Hz tone, so the first test has audio to work on."""
-    frames = b"".join(struct.pack("<h", int(8000 * math.sin(2 * math.pi * 440 * i / rate))) for i in range(int(seconds * rate)))
-    out = io.BytesIO()
-    with wave.open(out, "wb") as file:
-        file.setnchannels(1)
-        file.setsampwidth(2)
-        file.setframerate(rate)
-        file.writeframes(frames)
-    return out.getvalue()
-
-
-def check(folder: Path) -> int:
+def run(folder: Path, fix: bool = False) -> Report:
+    """Check the app in ``folder``. With ``fix``, first add the permissions the code uses to app.json."""
     folder = folder.resolve()
+    report = _run(folder)
+    if fix:
+        fixed = _fix(folder, report)
+        if fixed:
+            report = _run(folder)
+            report.fixed = fixed
+    return report
+
+
+def _run(folder: Path) -> Report:
     manifest = check_manifest(folder)
-    findings = list(manifest.findings)
+    report = Report(folder, manifest.data, list(manifest.findings))
     data = manifest.data
-    names: list[str] = []
     worker = data.get("worker")
     entry = data.get("entry") or (worker.get("entry") if isinstance(worker, dict) else None)
     if isinstance(entry, str) and (folder / entry).is_file():
         loaded, problem = _load(folder / entry)
         if problem:
-            findings.append(problem)
+            report.findings.append(problem)
         else:
-            names = [item.name for item in loaded]
+            report.actions = loaded
             used = set()
             for item in loaded:
                 used |= item.permissions()
             used |= _static_permissions(folder)
-            findings += _imports(folder)
+            report.findings += _imports(folder)
             declared = manifest.permissions
             if data.get("$schema"):
                 for code in sorted(used - declared):
-                    findings.append(Finding(
+                    report.findings.append(Finding(
                         "permission_undeclared", f"app.json › permissions.{code}",
                         f"The code uses {code} ({_why_used(code)}), but app.json doesn't ask for it.",
-                        f'add "{code}": "{_reason(code)}" to permissions (write the reason in your own words)', "permissions",
+                        f'add "{code}": "{_reason(code)}" to permissions (or run mixel check --fix), then say why in your own words', "permissions",
                     ))
                 for code in sorted(declared - used - {"network"}):
-                    findings.append(Finding("permission_unused", f"app.json › permissions.{code}", f"app.json asks for {code}, but the code doesn't seem to use it.", "remove it, so people aren't asked for more than the app needs", "permissions", "warn"))
-    title = f"{data.get('name') or folder.name} {data.get('version') or ''}".strip()
-    print(f"Checking {title} (sdk {data.get('sdk', 'missing')})\n")
-    errors = [item for item in findings if item.severity == "error"]
-    warnings = [item for item in findings if item.severity != "error"]
-    for item in errors + warnings:
-        label = "error" if item.severity == "error" else "warn "
-        print(f"{label}  {item.code}  {item.where}")
-        for line in item.message.splitlines():
-            print(f"       {line}")
-        print(f"       fix:  {item.fix}")
-        print(f"       docs: {item.doc}\n")
-    if errors:
-        print(f"{_count(len(errors), 'error')}{', ' + _count(len(warnings), 'warning') if warnings else ''}. Fix the errors, then run ox check again.")
-        return 1
-    actions = f"{_count(len(names), 'action')}: {', '.join(names)}" if names else "no actions"
-    print(f"No errors{', ' + _count(len(warnings), 'warning') if warnings else ''}. {actions}.")
-    return 0
+                    report.findings.append(Finding("permission_unused", f"app.json › permissions.{code}", f"app.json asks for {code}, but the code doesn't seem to use it.", "remove it, so people aren't asked for more than the app needs", "permissions", "warn"))
+    return report
+
+
+def _fix(folder: Path, report: Report) -> list[str]:
+    """Add each permission the code uses and app.json lacks, with a reason to rewrite."""
+    missing = [item.where.rsplit(".", 1)[-1] for item in report.findings if item.code == "permission_undeclared"]
+    if not missing:
+        return []
+    path = folder / "app.json"
+    data = json.loads(path.read_text())
+    permissions = data.get("permissions")
+    if not isinstance(permissions, dict):
+        permissions = {}
+    for code in missing:
+        permissions[code] = _reason(code)
+    data["permissions"] = permissions
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    return [f"permissions.{code} added: rewrite the reason, people read it before they install" for code in missing]
 
 
 def _load(entry: Path):
@@ -336,8 +246,8 @@ def _imports(folder: Path) -> list[Finding]:
             for name in names:
                 top = name.split(".")[0]
                 key = name if name in _banned else top
-                if key in _banned and (key, str(rel)) not in seen:
-                    seen.add((key, str(rel)))  # type: ignore[arg-type]
+                if key in _banned and f"{key}:{rel}" not in seen:
+                    seen.add(f"{key}:{rel}")
                     found.append(Finding("banned_api", f"{rel}:{node.lineno}", f"{key} is not allowed in apps.", _banned[key], "actions#never", "warn"))
                 if top in stdlib or top in local or top == "ox1audio" or top in seen or id(node) in optional:
                     continue
@@ -385,18 +295,3 @@ def _why_used(code: str) -> str:
 
 def _reason(code: str) -> str:
     return {"files": "Open the songs you choose.", "library": "Save the results to your Library.", "data": "Remember your settings on this computer."}.get(code, "Why the app needs it.")
-
-
-def _count(n: int, noun: str) -> str:
-    return f"{n} {noun}{'' if n == 1 else 's'}"
-
-
-def _slug(title: str) -> str:
-    cleaned = "".join(char.lower() if char.isalnum() else "-" for char in title).strip("-")
-    while "--" in cleaned:
-        cleaned = cleaned.replace("--", "-")
-    return cleaned or "app"
-
-
-if __name__ == "__main__":
-    main()

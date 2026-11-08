@@ -1,4 +1,4 @@
-"""app.json v1, checked the way 0x1audio reads it. Used by ``ox check``.
+"""app.json v1, checked the way 0x1audio reads it. Used by ``mixel check``.
 
 The desktop has the same rules in TypeScript (electron/apps/schema.ts). GAB-37
 generates both from one contract; until then, change them together.
@@ -36,6 +36,9 @@ class Finding:
         # anchor is "page#section", or a section of the app.json page.
         return f"{DOCS}/{self.anchor if '#' in self.anchor or '/' in self.anchor else 'app-json#' + self.anchor}"
 
+    def json(self) -> dict:
+        return {"code": self.code, "severity": self.severity, "where": self.where, "message": self.message, "fix": self.fix, "doc": self.doc}
+
 
 @dataclass
 class Manifest:
@@ -51,7 +54,7 @@ class Manifest:
 def check(folder: Path) -> Manifest:
     path = folder / "app.json"
     if not path.is_file():
-        return Manifest({}, [Finding("manifest_missing", "app.json", "There is no app.json in this folder.", 'run ox new "My App" to start one', "fields")])
+        return Manifest({}, [Finding("manifest_missing", "app.json", "There is no app.json in this folder.", 'run mixel new "My App" to start one', "fields")])
     try:
         data = json.loads(path.read_text())
     except json.JSONDecodeError as error:

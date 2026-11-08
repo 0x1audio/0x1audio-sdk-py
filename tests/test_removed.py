@@ -64,7 +64,7 @@ class RemovedTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             done = subprocess.run([sys.executable, "-m", "ox1audio.cli", "eject"], capture_output=True, text=True, cwd=folder, env={"PYTHONPATH": str(Path(ox.__file__).resolve().parents[1])})
         self.assertEqual(done.returncode, 2)
-        self.assertTeaches(done.stderr, "ox eject is gone")
+        self.assertTeaches(done.stderr, "mixel eject is gone")
 
 
 if __name__ == "__main__":

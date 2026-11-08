@@ -1,4 +1,4 @@
-"""ox new writes an app that passes ox check and its own test; ox check teaches."""
+"""mixel new writes an app that passes mixel check and its own test; mixel check teaches."""
 
 import json
 import os

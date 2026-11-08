@@ -7,7 +7,6 @@ import os
 import re
 import stat
 import subprocess
-import tempfile
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
