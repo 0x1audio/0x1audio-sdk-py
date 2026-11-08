@@ -11,11 +11,27 @@ import shutil
 from pathlib import Path
 
 
+_scratch: Path | None = None
+
+
+def scratch() -> Path:
+    """Outside Mixel (ox.test, mixel run, mixel test): one data folder for this process, empty at
+    the start and removed at the end, so it behaves like the desktop's within one session."""
+    global _scratch
+    if _scratch is None:
+        import atexit
+        import tempfile
+
+        _scratch = Path(tempfile.mkdtemp(prefix="mixel-data-"))
+        atexit.register(shutil.rmtree, _scratch, True)
+    return _scratch
+
+
 def root() -> Path:
     """The folder for this app's data. It is created the first time it is used."""
     value = os.environ.get("OX1_DATA", "").strip()
     if not value:
-        raise RuntimeError("This app has no data folder.")
+        raise RuntimeError("This app has no data folder: ox.data works inside Mixel, mixel run, mixel test and ox.test.\nfix:  run the action with mixel run or ox.test, or open the app with mixel dev")
     folder = Path(value)
     folder.mkdir(parents=True, exist_ok=True)
     return folder.resolve()

@@ -39,7 +39,8 @@ def main(argv: list[str]) -> int:
         spec.loader.exec_module(module)  # type: ignore[union-attr]
     except BaseException as exc:  # noqa: BLE001
         traceback.print_exc()
-        send({"type": "error", "error": {"code": "app_failed_to_load", "message": f"{entry.name} could not start: {type(exc).__name__}: {exc}", "fix": "run mixel check, it shows the line"}})
+        text, fix = _split(str(exc), "run mixel check, it shows the line")
+        send({"type": "error", "error": {"code": "app_failed_to_load", "message": f"{entry.name} could not start: {type(exc).__name__}: {text}", "fix": fix}})
         return 1
     finally:
         runner._loading = False
@@ -81,7 +82,8 @@ def main(argv: list[str]) -> int:
         traceback.print_exc()
         frames = [frame for frame in traceback.extract_tb(exc.__traceback__) if Path(frame.filename).resolve().is_relative_to(entry.parent)]
         where = f"{Path(frames[-1].filename).name}:{frames[-1].lineno}" if frames else ""
-        send({"type": "error", "error": {"code": "crashed", "message": f"{type(exc).__name__}: {exc}", "where": where, "fix": "fix the error at that line; the traceback is above"}, "items": items})
+        text, fix = _split(str(exc), "fix the error at that line; the traceback is above")
+        send({"type": "error", "error": {"code": "crashed", "message": f"{type(exc).__name__}: {text}", "where": where, "fix": fix}, "items": items})
     return 1
 
 
@@ -106,5 +108,14 @@ def _keep(items: list[dict], out: Path | None) -> None:
         item["path"] = str(target)
 
 
+def _split(text: str, fallback: str) -> tuple[str, str]:
+    """An SDK error carries its own "fix:" (and "docs:") lines: use that fix once, not twice."""
+    import re
+
+    fix = re.search(r"\nfix:\s+(.*)", text)
+    return text.split("\nfix:")[0].strip(), fix.group(1).strip() if fix else fallback
+
+
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
+

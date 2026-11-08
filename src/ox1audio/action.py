@@ -11,6 +11,7 @@ import atexit
 import contextvars
 import inspect
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -527,6 +528,10 @@ def test(fn: Callable | str, *, stop_at: float | None = None, **values: object) 
     ``ox.progress`` raises ``ox.Cancelled``; its ``.kept`` lists what was kept.
     """
     act = find(fn)
+    if not os.environ.get("OX1_DATA", "").strip():
+        from ox1audio import data
+
+        os.environ["OX1_DATA"] = str(data.scratch())
     items: list[dict] = []
     reported: list[tuple[float | None, str]] = []
     events: list[tuple[str, object]] = []

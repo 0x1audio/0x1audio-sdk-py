@@ -80,9 +80,13 @@ def run(folder: Path, action: str, values: dict | None = None, files: list[str] 
         name, multiple = control
         given.setdefault(name, files if multiple else files[0])
     python = interpreter(folder)
+    import tempfile
+
+    # A fresh data folder for this run, removed after it (ox.data inside Mixel keeps its files).
+    scratch = tempfile.TemporaryDirectory(prefix="mixel-data-")
     process = subprocess.Popen(
         [python, "-m", "ox1audio.cli._actionrun", str(folder / entry), action, json.dumps(given), *([out] if out else [])],
-        cwd=folder, env=app_env(python), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        cwd=folder, env={**app_env(python), "OX1_DATA": scratch.name}, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
     final: dict = {}
     events: list = []
@@ -107,6 +111,7 @@ def run(folder: Path, action: str, values: dict | None = None, files: list[str] 
             final = message
     process.wait()
     reader.join(timeout=5)
+    scratch.cleanup()
     tail = [line.rstrip("\n") for line in log][-40:]
     if final.get("type") == "done":
         return {"ok": True, "result": final["result"], "items": final["items"], "progress_calls": final["progress_calls"], "events": events, "log_tail": tail}

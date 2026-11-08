@@ -45,7 +45,9 @@ def run(folder: Path, pattern: str | None = None) -> dict:
     with tempfile.TemporaryDirectory() as scratch:
         target = Path(scratch) / "result.json"
         command = [python, "-m", "ox1audio.cli._testrun", str(target), *(["-k", pattern] if pattern else [])]
-        done = subprocess.run(command, cwd=folder, env=env, capture_output=True, text=True, timeout=3600)
+        # One data folder for the whole test run, empty at the start (ox.data as in one Mixel session).
+        (Path(scratch) / "data").mkdir()
+        done = subprocess.run(command, cwd=folder, env={**env, "OX1_DATA": str(Path(scratch) / "data")}, capture_output=True, text=True, timeout=3600)
         if not target.is_file():
             tail = (done.stderr or done.stdout).strip().splitlines()[-5:]
             return {"ok": False, "stage": "test", "passed": 0, "failed": [], "error": {

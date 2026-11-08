@@ -53,6 +53,7 @@ GITIGNORE = """__pycache__/
 *.py[cod]
 .venv/
 node_modules/
+out/
 """
 
 PYPROJECT = """[project]
@@ -94,11 +95,15 @@ def command(args: list[str]) -> int:
     return new(Path.cwd() / slug(title), title, license)
 
 
+# The words about converting that an app must rewrite once it does something else (mixel check --strict).
+TEMPLATE_WORDS = {"summary": "Convert songs to another format.", "library": "Save the converted copies to your Library."}
+
+
 def new(directory: Path, title: str, license: str = "Apache-2.0") -> int:
     if directory.exists() and any(directory.iterdir()):
         raise Stop(f"{directory.name}/ already has files in it.", fix=f'choose another name, or delete {directory.name}/', code=FAILED, error="folder_not_empty")
     name = directory.name
-    summary = "Convert songs to another format."
+    summary = TEMPLATE_WORDS["summary"]
     files = {
         "app.py": APP,
         "app.json": json.dumps({
@@ -112,7 +117,7 @@ def new(directory: Path, title: str, license: str = "Apache-2.0") -> int:
             "license": license,
             "permissions": {
                 "files": "Open the songs you choose.",
-                "library": "Save the converted copies to your Library.",
+                "library": TEMPLATE_WORDS["library"],
             },
         }, indent=2) + "\n",
         "AGENTS.md": agents_md(),
@@ -130,7 +135,8 @@ def new(directory: Path, title: str, license: str = "Apache-2.0") -> int:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(body)
     (directory / "tests" / "tone.wav").write_bytes(tone())
-    print(f"Created {name}/")
+    repository = _git_init(directory)
+    print(f"Created {name}/{' (a new git repository)' if repository else ''}")
     notes = {
         "app.py": "one action, convert: change it into yours",
         "app.json": "name, summary, permissions (rewrite the words for your app)",
@@ -144,6 +150,22 @@ def new(directory: Path, title: str, license: str = "Apache-2.0") -> int:
         print(f"  {file.ljust(width)}  {note}")
     print(f"Next\n  cd {name}\n  mixel check   the rules Mixel and its reviewers apply\n  mixel test    run tests/\n  mixel dev     open it in Mixel, reload on save")
     return OK
+
+
+def _git_init(directory: Path) -> bool:
+    """An app is its own repository (publish needs one). Not inside another repository, and never fatal."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("git"):
+        return False
+    try:
+        inside = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=directory, capture_output=True, text=True, timeout=20)
+        if inside.returncode == 0:
+            return False
+        return subprocess.run(["git", "init", "-q", "-b", "main"], cwd=directory, capture_output=True, timeout=20).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def agents_md() -> str:

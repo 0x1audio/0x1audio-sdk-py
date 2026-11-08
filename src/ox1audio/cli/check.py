@@ -11,7 +11,7 @@ from pathlib import Path
 
 from ox1audio.cli import _safety, out
 from ox1audio.cli.out import FAILED, OK, Stop
-from ox1audio.manifest import Finding, check as check_manifest
+from ox1audio.manifest import CODES, Finding, check as check_manifest
 
 
 @dataclass
@@ -125,6 +125,8 @@ def _run(folder: Path) -> Report:
             if safety.network:
                 used.add("network")
             report.findings += _imports(folder, safety.banned_imports)
+            report.findings += _needs(folder, safety.needs, report.findings)
+            report.findings += _lock(folder)
             declared = manifest.permissions
             if data.get("$schema"):
                 for code in sorted(used - declared):
@@ -146,7 +148,9 @@ def _run(folder: Path) -> Report:
                     reason = reason.get("why") if isinstance(reason, dict) else reason
                     if isinstance(reason, str) and reason.strip().upper().startswith("TODO"):
                         report.findings.append(Finding("permission_reason", f"app.json › permissions.{code}", f"The reason for {code} is still a TODO.", f'write it for the person, like "{_reason(code)}"; they read it before they install', "permissions", "warn"))
-                for code in sorted(declared - used - {"network"}):
+                report.findings += _template_words(data, [item.name for item in loaded])
+                # An unknown code (like "mic") already has permission_unknown; don't call it unused too.
+                for code in sorted((declared & set(CODES)) - used - {"network"}):
                     report.findings.append(Finding("permission_unused", f"app.json › permissions.{code}", f"app.json asks for {code}, but the code doesn't seem to use it.", "remove it, so people aren't asked for more than the app needs", "permissions"))
     return report
 
@@ -184,26 +188,40 @@ def _load_in_app(folder: Path, entry: Path):
     return [Loaded(item["spec"], item["permissions"]) for item in body["actions"]], None
 
 
+def _fix_lock(folder: Path, report: Report) -> list[str]:
+    if not any(item.code == "lock_missing" for item in report.findings):
+        return []
+    import shutil
+    import subprocess
+
+    uv = shutil.which("uv")
+    if not uv:
+        return []
+    done = subprocess.run([uv, "lock", "--quiet"], cwd=folder, capture_output=True, text=True, timeout=600)
+    return ["uv.lock written by uv lock: commit it with the app"] if done.returncode == 0 else []
+
+
 def _todo(code: str) -> str:
     return f"TODO: say why the app needs {code}, in one sentence."
 
 
 def _fix(folder: Path, report: Report) -> list[str]:
-    """Add each permission the code uses (with a reason to rewrite) and each package it imports."""
+    """Add each permission the code uses (with a reason to rewrite) and each package it imports, then lock them."""
     fixed = _fix_dependencies(folder, report)
     missing = [item.where.rsplit(".", 1)[-1] for item in report.findings if item.code == "permission_undeclared"]
-    if not missing:
-        return fixed
-    path = folder / "app.json"
-    data = json.loads(path.read_text())
-    permissions = data.get("permissions")
-    if not isinstance(permissions, dict):
-        permissions = {}
-    for code in missing:
-        permissions[code] = {"why": _todo(code), "hosts": report.hosts[:10]} if code == "network" else _todo(code)
-    data["permissions"] = permissions
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-    return fixed + [f"permissions.{code} added with a TODO reason: write it, people read it before they install" for code in missing]
+    if missing:
+        path = folder / "app.json"
+        data = json.loads(path.read_text())
+        permissions = data.get("permissions")
+        if not isinstance(permissions, dict):
+            permissions = {}
+        for code in missing:
+            permissions[code] = {"why": _todo(code), "hosts": report.hosts[:10]} if code == "network" else _todo(code)
+        data["permissions"] = permissions
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        fixed += [f"permissions.{code} added with a TODO reason: write it, people read it before they install" for code in missing]
+    # Packages may have just been added: lock what pyproject lists now.
+    return fixed + _fix_lock(folder, _run(folder) if fixed else report)
 
 
 def _fix_dependencies(folder: Path, report: Report) -> list[str]:
@@ -410,6 +428,42 @@ def _declared(folder: Path) -> set[str]:
             if match and not line.strip().startswith("#"):
                 names.add(_normal(match.group(1)))
     return names
+
+
+def _template_words(data: dict, actions: list[str]) -> list[Finding]:
+    """Words mixel new wrote about converting, left in an app that no longer converts (it has other actions).
+    People read them on the install sheet."""
+    from ox1audio.cli.new import TEMPLATE_WORDS
+
+    if "convert" in actions:
+        return []
+    found = []
+    if data.get("summary") == TEMPLATE_WORDS["summary"]:
+        found.append(Finding("template_words", "app.json › summary", f'summary is still the template\'s: "{data["summary"]}"', "say in one sentence what your app does for a musician", "summary"))
+    permissions = data.get("permissions") if isinstance(data.get("permissions"), dict) else {}
+    for code, reason in permissions.items():
+        if reason == TEMPLATE_WORDS.get(code):
+            found.append(Finding("template_words", f"app.json › permissions.{code}", f'The reason for {code} is still the template\'s: "{reason}"', f'write why your app needs {code}; people read it before they install', "permissions"))
+    return found
+
+
+def _needs(folder: Path, needs: dict[str, str], found: list[Finding]) -> list[Finding]:
+    """ox.audio.read and write hand numpy arrays back: the app lists numpy itself."""
+    declared = _declared(folder)
+    missing = []
+    for package, where in needs.items():
+        if _normal(package) in declared or any(item.code == "dependency_missing" and f'add "{package}"' in item.fix for item in found):
+            continue
+        file, _, helper = where.partition(" (")
+        missing.append(Finding("dependency_missing", file, f"{helper.rstrip(')')} works on {package} arrays, but pyproject.toml doesn't list {package}, so Mixel won't install it.", f'add "{package}" to pyproject.toml › [project].dependencies', "actions#dependencies"))
+    return missing
+
+
+def _lock(folder: Path) -> list[Finding]:
+    """The registry and Mixel install exactly what uv.lock pins: an app with packages needs one."""
+    if not _declared(folder) or (folder / "uv.lock").is_file():
+        return []
+    return [Finding("lock_missing", "uv.lock", "pyproject.toml lists packages but there is no uv.lock, so Mixel can't install exactly what was reviewed (the registry refuses it).", "uv lock, then commit uv.lock (mixel check --fix runs it)", "actions#dependencies")]
 
 
 def _why_used(code: str) -> str:

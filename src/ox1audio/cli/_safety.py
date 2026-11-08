@@ -59,6 +59,9 @@ DUNDERS = {"__builtins__", "__subclasses__", "__globals__", "__getattribute__", 
 NETWORK = ("urllib.request", "http.client", "ftplib", "smtplib", "poplib", "imaplib", "nntplib", "telnetlib", "xmlrpc.client",
            "huggingface_hub", "torch.hub", "websocket", "websockets")
 
+# SDK helpers that need a package the app must list itself (the SDK doesn't install numpy for every app).
+NEEDS = {"ox1audio.audio.read": "numpy", "ox1audio.audio.write": "numpy"}
+
 # Where a fixed path literal means a file outside the app: the first arguments of these.
 _file_modules = {"os", "shutil", "pathlib", "glob", "io", "codecs", "tarfile", "zipfile", "sqlite3", "fileinput", "soundfile", "wave", "aifc", "numpy", "json", "tomllib"}
 _home = {"os.path.expanduser", "pathlib.Path.home", "os.path.expandvars"}
@@ -76,6 +79,8 @@ class Scan:
     network: list[str] = field(default_factory=list)
     hosts: list[str] = field(default_factory=list)
     banned_imports: set[str] = field(default_factory=set)
+    # Packages SDK helpers the code calls need, like numpy for ox.audio.read: package -> "app.py:3 (ox.audio.read)".
+    needs: dict[str, str] = field(default_factory=dict)
 
 
 def scan(folder: Path, skip: set[str], local: set[str] = frozenset()) -> Scan:  # type: ignore[assignment]
@@ -280,6 +285,9 @@ class _Reader:
             shown = call.removeprefix("builtins.")
             self.refuse(node, shown, f"{shown} is not allowed in apps.", CALLS[call])
             return
+        need = _covered(meaning, NEEDS)
+        if need and NEEDS[need] not in self.found.needs:
+            self.found.needs[NEEDS[need]] = f"{self.rel}:{getattr(node, 'lineno', 0)} ({need.replace('ox1audio.', 'ox.')})"
         net = _covered(meaning, NETWORK)
         if net and f"net:{net}" not in self.seen:
             self.seen.add(f"net:{net}")

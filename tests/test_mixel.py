@@ -177,6 +177,9 @@ class TestAndRunTest(Scratch):
         (app / "app.py").write_text("import only_in_the_venv\n" + (app / "app.py").read_text())
         pyproject = app / "pyproject.toml"
         pyproject.write_text(pyproject.read_text().replace("dependencies = []", 'dependencies = ["only-in-the-venv"]'))
+        locked = mixel("check", "--json", cwd=app)
+        self.assertIn("lock_missing", [item["code"] for item in json.loads(locked.stdout)["errors"]])
+        (app / "uv.lock").write_text("version = 1\n")
         done = mixel("check", cwd=app)
         self.assertEqual(done.returncode, 0, done.stdout)
         tested = mixel("test", cwd=app)
