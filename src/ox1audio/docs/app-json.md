@@ -9,7 +9,7 @@ Every app has an `app.json` at the top of its folder. `$schema` is `https://0x1a
 | `displayName` | required | The name people see. |
 | `summary` | optional | One sentence about what the app does, for the catalog. |
 | `version` | required | MAJOR.MINOR.PATCH. Raise it before each release. |
-| `sdk` | required | The 0x1audio versions the app runs on, as a caret range like ^0.3. |
+| `sdk` | required | The Mixel versions the app runs on, as a caret range like ^0.3. |
 | `entry` | entry or page | The Python file with the app's @ox.action functions. |
 | `page` | entry or page | An optional page, built by Vite. |
 | `permissions` | optional | What the app may use, each with the reason the person reads. Binding: anything else is refused. |

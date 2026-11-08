@@ -53,7 +53,7 @@ class NewAndCheckTest(unittest.TestCase):
         (app / "app.json").write_text(json.dumps({"displayName": "Old", "version": "0.1.0", "worker": {"runtime": "python", "entry": "app.py"}}))
         code, out = self.check(app)
         self.assertEqual(code, 1)
-        self.assertIn('error  manifest_v0  app.json\n       app.json has no "$schema", so 0x1audio reads it as v0.', out)
+        self.assertIn('error  manifest_v0  app.json\n       app.json has no "$schema", so Mixel reads it as v0.', out)
         self.assertIn("fix:  add \"$schema\"", out)
         self.assertIn("docs: https://docs.0x1audio.com/reference/app-json\n", out)
 
@@ -92,7 +92,7 @@ class ImportsTest(NewAndCheckTest):
         (app / "app.py").write_text("import numpy\n" + (app / "app.py").read_text())
         code, out = self.check(app)
         self.assertEqual(code, 1)
-        self.assertIn("error  dependency_missing  app.py:1\n       app.py imports numpy, but pyproject.toml doesn't list it, so 0x1audio won't install it.", out)
+        self.assertIn("error  dependency_missing  app.py:1\n       app.py imports numpy, but pyproject.toml doesn't list it, so Mixel won't install it.", out)
         self.assertIn('fix:  add "numpy" to pyproject.toml', out)
 
     def test_running_programs_is_flagged(self):

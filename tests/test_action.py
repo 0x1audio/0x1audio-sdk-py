@@ -170,7 +170,7 @@ class ChoiceAndAudioTest(unittest.TestCase):
             notes.write_text("not audio")
             with self.assertRaises(ox.Problem) as caught:
                 ox.audio.probe(notes)
-        self.assertEqual(str(caught.exception), "notes.wav isn't a sound file 0x1audio can open.")
+        self.assertEqual(str(caught.exception), "notes.wav isn't a sound file Mixel can open.")
         self.assertNotIn("ffmpeg", str(caught.exception) + caught.exception.hint)
 
 

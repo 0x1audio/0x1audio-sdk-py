@@ -1,4 +1,4 @@
-"""Load an app's entry file and serve its actions. 0x1audio runs ``python -m ox1audio app.py``."""
+"""Load an app's entry file and serve its actions. Mixel runs ``python -m ox1audio app.py``."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ _loading = False
 
 
 def run() -> None:
-    """Serve this file's actions. Optional: 0x1audio already does this when it opens the app."""
+    """Serve this file's actions. Optional: Mixel already does this when it opens the app."""
     if _loading:
         return
     _protocol.serve(actions())

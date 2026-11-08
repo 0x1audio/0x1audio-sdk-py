@@ -260,7 +260,7 @@ def _load(entry: Path):
         missing = (exc.name or "").split(".")[0]
         if missing and _normal(_dist_names.get(missing, missing)) in _declared(entry.parent):
             return [], Finding("dependency_not_installed", entry.name, f"{missing} is in pyproject.toml but not installed, so the actions couldn't be checked.", "uv venv && uv pip install -r pyproject.toml   (mixel check, test and run use the app's .venv)", "actions#dependencies")
-        return [], Finding("dependency_missing", f"{entry.name}{_line_of(exc, entry)}", f"{entry.name} imports {missing}, but pyproject.toml doesn't list it, so 0x1audio won't install it.", f'add "{_dist_names.get(missing, missing)}" to pyproject.toml › [project].dependencies', "actions#dependencies")
+        return [], Finding("dependency_missing", f"{entry.name}{_line_of(exc, entry)}", f"{entry.name} imports {missing}, but pyproject.toml doesn't list it, so Mixel won't install it.", f'add "{_dist_names.get(missing, missing)}" to pyproject.toml › [project].dependencies', "actions#dependencies")
     except Exception as exc:  # noqa: BLE001 - every failure is reported as a finding
         text = str(exc)
         fix_line = re.search(r"\nfix:  (.*)", text)
@@ -349,7 +349,7 @@ def _local(folder: Path) -> set[str]:
 
 
 def _imports(folder: Path, refused: set[str] = frozenset()) -> list[Finding]:  # type: ignore[assignment]
-    """Python packages the code imports but pyproject.toml doesn't list (0x1audio installs only those).
+    """Python packages the code imports but pyproject.toml doesn't list (Mixel installs only those).
     ``refused`` are packages mixel check already refuses (requests): never ask to add those."""
     import ast
 
@@ -389,7 +389,7 @@ def _imports(folder: Path, refused: set[str] = frozenset()) -> list[Finding]:  #
                 if _normal(top) not in declared and _normal(_dist_names.get(top, top)) not in declared:
                     seen.add(top)
                     severity = "warn" if nested or id(node) in lazy else "error"
-                    found.append(Finding("dependency_missing", f"{rel}:{node.lineno}", f"{rel} imports {top}, but pyproject.toml doesn't list it, so 0x1audio won't install it.", f'add "{_dist_names.get(top, top)}" to pyproject.toml › [project].dependencies', "actions#dependencies", severity))
+                    found.append(Finding("dependency_missing", f"{rel}:{node.lineno}", f"{rel} imports {top}, but pyproject.toml doesn't list it, so Mixel won't install it.", f'add "{_dist_names.get(top, top)}" to pyproject.toml › [project].dependencies', "actions#dependencies", severity))
     return found
 
 

@@ -143,7 +143,7 @@ class ProtocolTest(unittest.TestCase):
 
 
 class EntryTest(unittest.TestCase):
-    """0x1audio starts every app as `python -m ox1audio <entry>`."""
+    """Mixel starts every app as `python -m ox1audio <entry>`."""
 
     def run_entry(self, source, lines=()):
         folder = tempfile.TemporaryDirectory()

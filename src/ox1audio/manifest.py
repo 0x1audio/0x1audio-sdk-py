@@ -1,4 +1,4 @@
-"""app.json v1, checked the way 0x1audio reads it. Used by ``mixel check``.
+"""app.json v1, checked the way Mixel reads it. Used by ``mixel check``.
 
 The rules (fields, patterns, limits, permission codes) come from the contract
 (sdk-py/contract, generated into _contract.py), as do the desktop's.
@@ -90,7 +90,7 @@ def check(folder: Path) -> Manifest:
         found.append(Finding(code, f"app.json › {where}" if where else "app.json", message, fix, anchor, severity))
 
     if "$schema" not in data:
-        bad("manifest_v0", "", 'app.json has no "$schema", so 0x1audio reads it as v0. v0 still loads, until 0.5.',
+        bad("manifest_v0", "", 'app.json has no "$schema", so Mixel reads it as v0. v0 still loads, until 0.5.',
             f'add "$schema": "{SCHEMA}", "sdk": "^0.3", rename worker.entry to entry and frontend to page, and give each permission a reason', "v1")
         return Manifest(data, found)
     if data["$schema"] != SCHEMA:
@@ -114,7 +114,7 @@ def check(folder: Path) -> Manifest:
         bad("manifest_version", "version", "version is MAJOR.MINOR.PATCH.", '"version": "0.1.0"')
     sdk = data.get("sdk")
     if sdk is None:
-        bad("sdk_missing", "sdk", "sdk is required: it says which 0x1audio can run this app.", '"sdk": "^0.3"', "sdk")
+        bad("sdk_missing", "sdk", "sdk is required: it says which Mixel can run this app.", '"sdk": "^0.3"', "sdk")
     elif not isinstance(sdk, str) or not _range.match(sdk):
         bad("sdk_range", "sdk", f"sdk {json.dumps(sdk)} is not a caret range.", '"sdk": "^0.3"', "sdk")
     else:

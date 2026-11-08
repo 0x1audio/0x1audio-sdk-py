@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://0x1audio.com/schema/app/v1.json",
-  "title": "0x1audio app (app.json v1)",
-  "description": "What 0x1audio reads from an app. mixel check, the desktop and the registry apply the same rules. Generated docs and validators come from this file (sdk-py/contract).",
+  "title": "Mixel app (app.json v1)",
+  "description": "What Mixel reads from an app. mixel check, the desktop and the registry apply the same rules. Generated docs and validators come from this file (sdk-py/contract).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -54,7 +54,7 @@
       "pattern": "^(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$"
     },
     "sdk": {
-      "description": "The 0x1audio versions the app runs on, as a caret range like ^0.3.",
+      "description": "The Mixel versions the app runs on, as a caret range like ^0.3.",
       "type": "string",
       "pattern": "^\\^(0|[1-9][0-9]{0,3})\\.(0|[1-9][0-9]{0,3})(\\.(0|[1-9][0-9]{0,3}))?$"
     },

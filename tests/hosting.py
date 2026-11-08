@@ -1,4 +1,4 @@
-"""A fake 0x1audio host for protocol tests: pipes in, pipes out, one JSON line at a time."""
+"""A fake Mixel host for protocol tests: pipes in, pipes out, one JSON line at a time."""
 
 import json
 import os

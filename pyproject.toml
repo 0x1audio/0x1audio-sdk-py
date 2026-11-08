@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ox1audio"
 version = "0.3.0"
-description = "Python SDK for the 0x1audio cloud and local app workers."
+description = "Build Mixel apps: the Python SDK and the mixel command."
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]

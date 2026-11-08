@@ -100,7 +100,7 @@ def probe(path: str | Path) -> Info:
     if not stream:
         from ox1audio.action import Problem
 
-        raise Problem(f"{source.name} isn't a sound file 0x1audio can open.", hint="Choose a WAV, AIFF, FLAC, MP3 or similar file.")
+        raise Problem(f"{source.name} isn't a sound file Mixel can open.", hint="Choose a WAV, AIFF, FLAC, MP3 or similar file.")
     duration = 0.0
     found = _duration.search(result.stderr)
     if found:
