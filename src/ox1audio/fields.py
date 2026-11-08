@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ox1audio.runtime import made_var
+
 _accepts = ("audio", "midi", "any")
 
 
@@ -207,6 +209,9 @@ class Export:
         self.path = Path(path)
         self.title = title
         self.metadata = metadata
+        made = made_var.get()
+        if made is not None:
+            made.append(self)
 
     def __repr__(self) -> str:
         return f"ox.{'file' if self.kind == 'other' else self.kind}({str(self.path)!r}, title={self.title!r})"

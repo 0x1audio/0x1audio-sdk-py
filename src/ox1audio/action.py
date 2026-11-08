@@ -10,6 +10,8 @@ from __future__ import annotations
 import atexit
 import contextvars
 import inspect
+import json
+import re
 import shutil
 import tempfile
 import threading
@@ -21,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ox1audio.fields import Export, Field, Files, Folder, Number, Optional, Text, Toggle, _missing
-from ox1audio.runtime import sink_var
+from ox1audio.runtime import made_var, sink_var
 
 DOCS = "https://docs.0x1audio.com"
 DEFAULT_TIMEOUT = 30 * 60
@@ -42,7 +44,13 @@ class Cancelled(BaseException):
     """The person pressed Stop. ``ox.progress()`` raises it; let it propagate after you clean up.
 
     Like KeyboardInterrupt it is a BaseException, so ``except Exception`` never swallows Stop.
+    Whatever the action already made with ``ox.sound/midi/file`` is kept: it goes to the
+    Library, and ``kept`` lists those items.
     """
+
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+        self.kept: list[dict] = []
 
 
 class BadInput(Exception):
@@ -230,6 +238,7 @@ class _Running:
     id: int
     cancel: threading.Event
     report: Callable[[float | None, str], None]
+    send: Callable[[str, object], None] = lambda name, body: None
     last_sent: float = 0.0
     last_label: str = ""
     coalesce: bool = True
@@ -263,6 +272,30 @@ def progress(fraction: float | None = None, label: str = "") -> None:
     current.last_sent = now
     current.last_label = label
     current.report(fraction, label)
+
+
+_event_name = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
+EVENT_LIMIT = 256 * 1024
+
+
+def emit(name: str, body: object = None) -> None:
+    """Send the page that ran this action an event while it runs, like a partial result.
+
+    The page gets it in ``ox.run(..., { onEvent: (name, body) => ... })``. ``body`` is
+    JSON-able, at most 256 KiB. Outside a running action this does nothing.
+    """
+    if not isinstance(name, str) or not _event_name.match(name):
+        raise TypeError(_teach(f"ox.emit({name!r}): an event name is a short word like \"partial\".", 'ox.emit("partial", {"done": 3})', "actions#events"))
+    current = _running.get()
+    if current is None:
+        return
+    try:
+        value = _json(body, name, "the event body")
+    except TypeError:
+        raise TypeError(_teach(f"ox.emit({name!r}): the body is a {type(body).__name__}, which can't be sent to the page.", "send None, a str, a number, or a dict or list of plain values", "actions#events")) from None
+    if len(json.dumps(value)) > EVENT_LIMIT:
+        raise TypeError(_teach(f"ox.emit({name!r}): the body is over 256 KiB.", "send less, or write it to a file and send its path", "actions#events"))
+    current.send(name, value)
 
 
 def bind(act: Action, given: object) -> dict:
@@ -367,18 +400,71 @@ def _bounds(control: Number) -> str:
     return ""
 
 
-def call(act: Action, given: object, *, ident: int = 0, cancel: threading.Event | None = None, report: Callable[[float | None, str], None] | None = None, coalesce: bool = True) -> object:
-    """Run one action: bind the input, call the function, and turn what it returned into JSON."""
+def call(
+    act: Action,
+    given: object,
+    *,
+    ident: int = 0,
+    cancel: threading.Event | None = None,
+    report: Callable[[float | None, str], None] | None = None,
+    send: Callable[[str, object], None] | None = None,
+    coalesce: bool = True,
+) -> object:
+    """Run one action: bind the input, call the function, and turn what it returned into JSON.
+
+    On Stop, ``ox.Cancelled`` comes out with ``kept``: the files the action had already
+    made (every ``ox.sound/midi/file`` whose file is there), added to the Library.
+    """
     values = bind(act, given)
     state = _Running(id=ident, cancel=cancel or threading.Event(), report=report or (lambda fraction, label: None), coalesce=coalesce)
+    if send is not None:
+        state.send = send
+    made: list[Export] = []
+    made_token = made_var.set(made)
     token = _running.set(state)
     try:
         returned = act.fn(**values)
         if state.cancel.is_set():
             raise Cancelled()
         return finish(returned, act.name)
+    except Cancelled as stop:
+        stop.kept = keep(made)
+        raise
+    except Exception:
+        if state.cancel.is_set():
+            # Stop broke a library mid-call (it raised its own error): still Stop, still keep.
+            stopped = Cancelled()
+            stopped.kept = keep(made)
+            raise stopped from None
+        raise
     finally:
         _running.reset(token)
+        made_var.reset(made_token)
+
+
+def keep(made: list[Export]) -> list[dict]:
+    """After Stop: what the action finished stays. Each file that is there goes to the Library once."""
+    kept: list[dict] = []
+    seen: set[str] = set()
+    for item in made:
+        try:
+            key = str(item.path.resolve())
+            if key in seen or not item.path.is_file() or item.path.stat().st_size == 0:
+                continue
+            seen.add(key)
+            kept.append(_export(item))
+        except Exception:  # noqa: BLE001 - one file the Library can't take doesn't lose the others
+            continue
+    return kept
+
+
+def stopped_message(kept: list[dict]) -> str:
+    """ "Stopped." or "Stopped. Kept 2: song.wav, song.flac." """
+    if not kept:
+        return "Stopped."
+    names = [Path(str(item.get("path") or item.get("title") or "")).name for item in kept]
+    shown = ", ".join(names[:3]) + (f" and {len(names) - 3} more" if len(names) > 3 else "")
+    return f"Stopped. Kept {len(names)}: {shown}."
 
 
 def finish(value: object, name: str = "") -> object:
@@ -434,14 +520,16 @@ def _export(item: Export) -> dict:
 def test(fn: Callable | str, *, stop_at: float | None = None, **values: object) -> dict:
     """Run an action here, without 0x1audio, the way the desktop would.
 
-    Returns ``{"result", "items", "progress"}``: what the page would get, the
-    Library items it would add (``id, kind, title, path, metadata``), and every
-    ``(fraction, label)`` it reported. ``stop_at=0.5`` presses Stop once progress
-    reaches half way, so the action's next ``ox.progress`` raises ``ox.Cancelled``.
+    Returns ``{"result", "items", "progress", "events"}``: what the page would get, the
+    Library items it would add (``id, kind, title, path, metadata``), every
+    ``(fraction, label)`` it reported, and every ``(name, body)`` it emitted.
+    ``stop_at=0.5`` presses Stop once progress reaches half way, so the action's next
+    ``ox.progress`` raises ``ox.Cancelled``; its ``.kept`` lists what was kept.
     """
     act = find(fn)
     items: list[dict] = []
     reported: list[tuple[float | None, str]] = []
+    events: list[tuple[str, object]] = []
     stop = threading.Event()
 
     def report(fraction: float | None, label: str) -> None:
@@ -456,10 +544,10 @@ def test(fn: Callable | str, *, stop_at: float | None = None, **values: object) 
 
     token = sink_var.set(sink)
     try:
-        result = call(act, _plainify(values), cancel=stop, report=report, coalesce=False)
+        result = call(act, _plainify(values), cancel=stop, report=report, send=lambda name, body: events.append((name, body)), coalesce=False)
     finally:
         sink_var.reset(token)
-    return {"result": result, "items": items, "progress": reported}
+    return {"result": result, "items": items, "progress": reported, "events": events}
 
 
 def _plainify(values: dict) -> dict:

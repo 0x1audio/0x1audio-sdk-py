@@ -11,7 +11,7 @@ The whole public API is ``__all__`` below. AGENTS.md in every app explains it.
 
 __version__ = "0.3.0"
 
-from ox1audio.action import Cancelled, Problem, action, progress, temp, test
+from ox1audio.action import Cancelled, Problem, action, emit, progress, temp, test
 from ox1audio.app import run
 from ox1audio.fields import Choice, Files, Folder, Number, Slider, Text, Toggle, file, midi, sound
 
@@ -30,6 +30,7 @@ __all__ = [
     "action",
     "audio",
     "data",
+    "emit",
     "file",
     "library",
     "midi",

@@ -9,6 +9,7 @@ Worker -> host
     {"type": "ready", "protocol": 1, "sdk": "0.3.0", "actions": [ActionSpec], "permissions": ["files"]}
     {"type": "fatal", "error": Error}                         the app could not load; the worker exits
     {"type": "progress", "id": 7, "fraction": 0.4 | null, "label": "Separating vocals"}
+    {"type": "event", "id": 7, "name": "partial", "body": ...}  ox.emit; the host forwards it to the page that made call 7
     {"type": "result", "id": 7, "body": ...}
     {"type": "error", "id": 7, "error": Error}
     {"type": "library", "rid": 3, "op": "add", "kind", "path", "title", "metadata"}
@@ -21,7 +22,8 @@ Host -> worker
     {"type": "cloud-result", "rid": 4, "status": 200, "body": {...}}
     {"type": "shutdown"}
 
-Error = {"code": "bad_input" | "problem" | "cancelled" | "crashed", "message": str, "hint"?: str, "detail"?: str}
+Error = {"code": "bad_input" | "problem" | "cancelled" | "crashed", "message": str, "hint"?: str, "detail"?: str,
+         "kept"?: [Item]}   kept: on "cancelled", what the action finished before Stop (already in the Library)
 ActionSpec = {"name", "title", "input": JSON Schema (object), "timeout": seconds}
 """
 
@@ -37,7 +39,7 @@ from collections.abc import Iterable
 from typing import BinaryIO
 
 from ox1audio import __version__
-from ox1audio.action import Action, BadInput, Cancelled, Problem, call
+from ox1audio.action import Action, BadInput, Cancelled, Problem, call, stopped_message
 from ox1audio.runtime import link_var
 
 PROTOCOL = 1
@@ -181,14 +183,19 @@ def _run(link: Link, act: Action, ident: int, given: object, cancels: dict[int, 
     def report(fraction: float | None, label: str) -> None:
         link.send({"type": "progress", "id": ident, "fraction": fraction, "label": label})
 
+    def send(name: str, body: object) -> None:
+        link.send({"type": "event", "id": ident, "name": name, "body": body})
+
     try:
-        body = call(act, given, ident=ident, cancel=cancel, report=report)
+        body = call(act, given, ident=ident, cancel=cancel, report=report, send=send)
         line = {"type": "result", "id": ident, "body": body}
         if len(json.dumps(line, allow_nan=False)) > 1 << 20:
             line = _error(ident, "crashed", "The result is too large to send.", detail=f"{act.name}() returned more than 1 MiB. Write large data to a file and return its path.")
             print(line["error"]["detail"], file=sys.stderr)
-    except Cancelled:
-        line = _error(ident, "cancelled", "Stopped.")
+    except Cancelled as stop:
+        line = _error(ident, "cancelled", stopped_message(stop.kept))
+        if stop.kept:
+            line["error"]["kept"] = stop.kept
     except Problem as problem:
         line = _error(ident, "problem", problem.message, problem.hint)
     except BadInput as bad:
