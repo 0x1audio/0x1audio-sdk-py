@@ -86,6 +86,22 @@ class NewAndCheckTest(unittest.TestCase):
         self.assertIn('fix:  annotate it with a control, like files: ox.Files("audio")', out)
 
 
+class ImportsTest(NewAndCheckTest):
+    def test_a_package_the_code_imports_but_does_not_declare_is_an_error(self):
+        app = self.new_app()
+        (app / "app.py").write_text("import numpy\n" + (app / "app.py").read_text())
+        code, out = self.check(app)
+        self.assertEqual(code, 1)
+        self.assertIn("error  dependency_missing  app.py:1\n       app.py imports numpy, but pyproject.toml doesn't list it, so 0x1audio won't install it.", out)
+        self.assertIn('fix:  add "numpy" to pyproject.toml', out)
+
+    def test_running_programs_is_flagged(self):
+        app = self.new_app()
+        (app / "app.py").write_text("import subprocess\n" + (app / "app.py").read_text())
+        code, out = self.check(app)
+        self.assertIn("warn   banned_api  app.py:1", out)
+
+
 class AgentsTest(unittest.TestCase):
     """Every code block in AGENTS.md is true: the Python runs, the app.json checks clean."""
 
@@ -117,7 +133,8 @@ class AgentsTest(unittest.TestCase):
 
     def test_agents_md_stays_under_two_thousand_tokens(self):
         text = Path(ox.__file__).with_name("AGENTS.md").read_text()
-        self.assertLess(len(text) / 4, 2000, "AGENTS.md is over the 2k token budget (bytes / 4)")
+        # Measured with tiktoken: 6304 bytes = 1768 cl100k tokens (0.28 tokens per byte), so 7000 bytes is about 1.96k.
+        self.assertLess(len(text.encode()), 7000, "AGENTS.md is over the 2k token budget")
 
 
 if __name__ == "__main__":

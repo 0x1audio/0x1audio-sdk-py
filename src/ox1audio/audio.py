@@ -151,7 +151,7 @@ def convert(path: str | Path, format_id: str, folder: str | Path | None = None, 
     """
     source = probe(path)
     fmt = find(format_id)
-    out = Path(folder) if folder else Path(tempfile.mkdtemp(prefix="ox1-audio-"))
+    out = Path(folder) if folder else _temp()
     target = _unused(out / f"{Path(source.name).stem}.{fmt.ext}")
     channels = source.channels if fmt.max_channels is None else min(source.channels, fmt.max_channels)
     rate = source.rate
@@ -187,6 +187,13 @@ def _run(step: _Plan, on_progress: Callable[[float], None] | None) -> Path:
     step.target.parent.mkdir(parents=True, exist_ok=True)
     errors: list[str] = []
     total = step.source.duration
+    # Only ever remove what this call created. (A failed run once removed the source it was reading.)
+    created = not step.target.exists()
+
+    def discard() -> None:
+        if created:
+            step.target.unlink(missing_ok=True)
+
     with subprocess.Popen(step.args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="replace") as process:
         reader = threading.Thread(target=lambda: errors.extend(process.stderr or []), daemon=True)
         reader.start()
@@ -203,14 +210,84 @@ def _run(step: _Plan, on_progress: Callable[[float], None] | None) -> Path:
             # Stop (ox.Cancelled from the progress callback) or any error: don't leave ffmpeg or half a file.
             process.kill()
             process.wait()
-            step.target.unlink(missing_ok=True)
+            discard()
             raise
         process.wait()
         reader.join(timeout=5)
     if process.returncode != 0:
-        step.target.unlink(missing_ok=True)
+        discard()
         tail = [line.strip() for line in errors if line.strip()][-3:]
         raise RuntimeError(" ".join(tail) or f"ffmpeg exited with {process.returncode}.")
     if on_progress:
         on_progress(1.0)
     return step.target
+
+
+def _temp() -> Path:
+    from ox1audio.action import temp
+
+    return temp()
+
+
+def _numpy():
+    try:
+        import numpy
+    except ImportError:
+        from ox1audio.action import _teach
+
+        raise ImportError(_teach("ox.audio.read and ox.audio.write give samples as numpy arrays, and numpy isn't installed.", 'add "numpy" to pyproject.toml › [project].dependencies', "actions#helpers")) from None
+    return numpy
+
+
+def read(path: str | Path):
+    """The samples of any file ffmpeg can open, as ``(samples, rate)``.
+
+    ``samples`` is a float32 numpy array shaped ``(frames, channels)``, from -1 to 1.
+    """
+    np = _numpy()
+    info = probe(path)
+    result = subprocess.run(
+        [ffmpeg(), "-hide_banner", "-nostdin", "-v", "error", "-i", info.path, "-map", "0:a:0", "-vn", "-f", "f32le", "-acodec", "pcm_f32le", "-ac", str(info.channels), "-"],
+        capture_output=True,
+        timeout=3600,
+    )
+    if result.returncode != 0:
+        from ox1audio.action import Problem
+
+        raise Problem(f"{info.name} couldn't be read.", hint="Choose a WAV, AIFF, FLAC, MP3 or similar file.")
+    samples = np.frombuffer(result.stdout, dtype="<f4")
+    return samples[: samples.size // info.channels * info.channels].reshape(-1, info.channels).copy(), info.rate
+
+
+def write(samples, rate: int, format_id: str = "wav", folder: str | Path | None = None, name: str = "audio") -> Path:
+    """Write samples (``(frames, channels)`` or one channel) as a new file and return it.
+
+    It goes in ``folder`` (a new temporary folder when None) as ``name.<ext>``, never over
+    a file that is there.
+    """
+    np = _numpy()
+    data = np.asarray(samples, dtype="<f4")
+    if data.ndim == 1:
+        data = data[:, None]
+    if data.ndim != 2 or data.shape[1] < 1 or data.shape[1] > 32:
+        raise ValueError("ox.audio.write takes samples shaped (frames, channels).")
+    fmt = find(format_id)
+    rate = int(rate)
+    out = Path(folder) if folder else _temp()
+    out.mkdir(parents=True, exist_ok=True)
+    target = _unused(out / f"{name}.{fmt.ext}")
+    channels = data.shape[1] if fmt.max_channels is None else min(data.shape[1], fmt.max_channels)
+    if fmt.rates and rate not in fmt.rates:
+        lower = [item for item in fmt.rates if item <= rate]
+        out_rate = max(lower) if lower else min(fmt.rates)
+    else:
+        out_rate = rate
+    args = [ffmpeg(), "-hide_banner", "-nostdin", "-v", "error", "-f", "f32le", "-ar", str(rate), "-ac", str(data.shape[1]), "-i", "-", "-c:a", fmt.encoder, "-ar", str(out_rate), "-ac", str(channels)]
+    if fmt.bitrates:
+        args += ["-b:a", f"{fmt.bitrates[-1]}k"]
+    args += [*fmt.extra, "-f", fmt.muxer, str(target)]
+    result = subprocess.run(args, input=np.ascontiguousarray(np.clip(data, -1, 1)).tobytes(), capture_output=True, timeout=3600)
+    if result.returncode != 0:
+        target.unlink(missing_ok=True)
+        raise RuntimeError(result.stderr.decode(errors="replace").strip().splitlines()[-1:] or "The file couldn't be written.")
+    return target

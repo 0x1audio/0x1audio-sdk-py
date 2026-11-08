@@ -186,3 +186,44 @@ class ConvertTest(unittest.TestCase):
             self.assertEqual(out.name, "song 2.wav")
             self.assertEqual(song.read_bytes(), before)
             self.assertEqual(ox.audio.convert(song, "flac", folder=song.parent).name, "song.flac")
+
+
+class StopAndSamplesTest(unittest.TestCase):
+    def setUp(self):
+        clear()
+
+    def test_stop_in_a_test_cancels_at_the_next_progress(self):
+        cleaned = []
+
+        @ox.action("Count")
+        def count(steps: int = 10):
+            try:
+                for step in range(steps):
+                    ox.progress(step / steps, f"Step {step}")
+                return "finished"
+            except ox.Cancelled:
+                cleaned.append(True)
+                raise
+
+        with self.assertRaises(ox.Cancelled):
+            ox.test(count, stop_at=0.5)
+        self.assertEqual(cleaned, [True])
+        self.assertFalse(issubclass(ox.Cancelled, Exception), "except Exception must not swallow Stop")
+
+    def test_samples_round_trip_and_new_files_go_in_a_temp_folder(self):
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy is not installed")
+        from ox1audio.cli import tone
+
+        with tempfile.TemporaryDirectory() as folder:
+            song = Path(folder) / "tone.wav"
+            song.write_bytes(tone())
+            samples, rate = ox.audio.read(song)
+            self.assertEqual((samples.shape[1], rate), (1, 44100))
+            out = ox.audio.write(samples * 0.5, rate, "flac", name="quieter")
+            self.assertEqual(out.name, "quieter.flac")
+            back, _ = ox.audio.read(out)
+            self.assertAlmostEqual(float(abs(back).max()), float(abs(samples).max()) * 0.5, places=2)
+            self.assertTrue(out.parent.name.startswith("ox1-"))

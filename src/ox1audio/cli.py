@@ -152,9 +152,18 @@ def new(directory: Path, title: str) -> int:
     (directory / "tests" / "tone.wav").write_bytes(tone())
     print(f"Created {slug}/")
     width = max(len(name) for name in files)
-    notes = {"app.py": "one action: convert", "app.json": "name, version, permissions", "AGENTS.md": "the rules, for you and your coding agent", "tests/test_app.py": "runs convert on a test tone"}
+    notes = {
+        "app.py": "one action, convert: change it into yours",
+        "app.json": "name, summary, permissions (rewrite the words for your app)",
+        "AGENTS.md": "the whole API, for you and your coding agent",
+        "tests/test_app.py": "runs convert on tests/tone.wav",
+        "pyproject.toml": "Python packages your app needs",
+        "README.md": "what the app does",
+        ".gitignore": "",
+    }
+    width = max(len(name) for name in notes)
     for name, note in notes.items():
-        print(f"  {name.ljust(width)}  {note}")
+        print(f"  {name.ljust(width)}  {note}".rstrip())
     print(f"Next\n  cd {slug}\n  ox check")
     return 0
 
@@ -193,6 +202,7 @@ def check(folder: Path) -> int:
             for item in loaded:
                 used |= item.permissions()
             used |= _static_permissions(folder)
+            findings += _imports(folder)
             declared = manifest.permissions
             if data.get("$schema"):
                 for code in sorted(used - declared):
@@ -233,12 +243,17 @@ def _load(entry: Path):
         spec = importlib.util.spec_from_file_location("__ox_check__", entry)
         module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
         spec.loader.exec_module(module)  # type: ignore[union-attr]
+    except ModuleNotFoundError as exc:
+        missing = (exc.name or "").split(".")[0]
+        if missing and _normal(_dist_names.get(missing, missing)) in _declared(entry.parent):
+            return [], Finding("dependency_not_installed", entry.name, f"{missing} is in pyproject.toml but not installed here, so the actions couldn't be checked.", f"install the app's packages where you run ox: uv pip install {_dist_names.get(missing, missing)}", "actions#dependencies")
+        return [], Finding("dependency_missing", f"{entry.name}{_line_of(exc, entry)}", f"{entry.name} imports {missing}, but pyproject.toml doesn't list it, so 0x1audio won't install it.", f'add "{_dist_names.get(missing, missing)}" to pyproject.toml › [project].dependencies', "actions#dependencies")
     except Exception as exc:  # noqa: BLE001 - every failure is reported as a finding
         text = str(exc)
         fix_line = re.search(r"\nfix:  (.*)", text)
         doc_line = re.search(r"\ndocs: https://docs\.0x1audio\.com/(\S+)", text)
         first = text.split("\nfix:")[0].strip() or type(exc).__name__
-        return [], Finding("app_failed_to_load", f"{entry.name}{_line_of(exc, entry)}", f"{type(exc).__name__}: {first}", fix_line.group(1) if fix_line else "fix the error at that line", doc_line.group(1) if doc_line else "actions")
+        return [], Finding("app_failed_to_load", f"{entry.name}{_line_of(exc, entry)}", f"{type(exc).__name__}: {first}", fix_line.group(1) if fix_line else "fix the error at that line", doc_line.group(1) if doc_line else "actions#an-action")
     finally:
         runner._loading = False
         sys.path.remove(str(entry.parent))
@@ -274,6 +289,94 @@ def _static_permissions(folder: Path) -> set[str]:
         if _data.search(text):
             used.add("data")
     return used
+
+
+_banned = {
+    "subprocess": "use ox.audio.convert, ox.audio.read or ox.audio.write instead of running programs",
+    "os.system": "use ox.audio.convert, ox.audio.read or ox.audio.write instead of running programs",
+    "ctypes": "remove it",
+    "socket": "remove it; network access goes through declared hosts",
+}
+
+
+def _imports(folder: Path) -> list[Finding]:
+    """Python packages the code imports but pyproject.toml doesn't list (0x1audio installs only those), and banned APIs."""
+    import ast
+
+    import warnings
+
+    stdlib = set(sys.stdlib_module_names)
+    # Anything that is a module or folder somewhere in the app counts as its own code (vendored trees add themselves to sys.path).
+    local = {path.stem for path in folder.rglob("*.py")} | {path.name for path in folder.rglob("*") if path.is_dir()}
+    declared = _declared(folder)
+    found: list[Finding] = []
+    seen: set[str] = set()
+    for path in sorted(folder.rglob("*.py")):
+        rel = path.relative_to(folder)
+        if set(rel.parts) & {".venv", "tests", "node_modules", "dist", "__pycache__"}:
+            continue
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                tree = ast.parse(path.read_text(errors="replace"))
+        except SyntaxError:
+            continue
+        optional = {id(inner) for node in ast.walk(tree) if isinstance(node, ast.Try) for inner in ast.walk(node)}
+        # Imports inside functions, or in files below the app's own folder (vendored code), may never run: warn.
+        lazy = {id(inner) for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) for inner in ast.walk(node)}
+        nested = len(rel.parts) > 1
+        for node in ast.walk(tree):
+            names = []
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                names = [node.module]
+            elif isinstance(node, ast.Attribute) and node.attr == "system" and isinstance(node.value, ast.Name) and node.value.id == "os":
+                names = ["os.system"]
+            for name in names:
+                top = name.split(".")[0]
+                key = name if name in _banned else top
+                if key in _banned and (key, str(rel)) not in seen:
+                    seen.add((key, str(rel)))  # type: ignore[arg-type]
+                    found.append(Finding("banned_api", f"{rel}:{node.lineno}", f"{key} is not allowed in apps.", _banned[key], "actions#never", "warn"))
+                if top in stdlib or top in local or top == "ox1audio" or top in seen or id(node) in optional:
+                    continue
+                if _normal(top) not in declared and _normal(_dist_names.get(top, top)) not in declared:
+                    seen.add(top)
+                    severity = "warn" if nested or id(node) in lazy else "error"
+                    found.append(Finding("dependency_missing", f"{rel}:{node.lineno}", f"{rel} imports {top}, but pyproject.toml doesn't list it, so 0x1audio won't install it.", f'add "{_dist_names.get(top, top)}" to pyproject.toml › [project].dependencies', "actions#dependencies", severity))
+    return found
+
+
+_dist_names = {"yaml": "pyyaml", "sklearn": "scikit-learn", "PIL": "pillow", "cv2": "opencv-python"}
+
+
+def _normal(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _declared(folder: Path) -> set[str]:
+    path = folder / "pyproject.toml"
+    if not path.is_file():
+        return set()
+    try:
+        import tomllib
+
+        data = tomllib.loads(path.read_text())
+    except Exception:  # noqa: BLE001 - a broken pyproject is reported by the desktop's install
+        return set()
+    names = set()
+    for spec in data.get("project", {}).get("dependencies", []) or []:
+        match = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", str(spec))
+        if match:
+            names.add(_normal(match.group(1)))
+    requirements = folder / "requirements.txt"
+    if requirements.is_file():
+        for line in requirements.read_text().splitlines():
+            match = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", line)
+            if match and not line.strip().startswith("#"):
+                names.add(_normal(match.group(1)))
+    return names
 
 
 def _why_used(code: str) -> str:

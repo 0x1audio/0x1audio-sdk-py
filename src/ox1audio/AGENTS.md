@@ -24,7 +24,7 @@ def convert(files: ox.Files("audio"), format: ox.Choice("wav", "flac", "mp3") = 
 - One decorated function per action. The parameters are the controls; Python defaults are their defaults. 0x1audio draws the form, checks the input, runs the action in the background, and shows progress and Stop.
 - Controls: `ox.Files("audio" | "midi" | "any", multiple=True)` gives `list[Path]` (one `Path` with `multiple=False`), `ox.Folder()` gives a `Path`, `ox.Choice("a", "b")` a `str`, `ox.Text(placeholder="")`, `ox.Number(min, max, step)`, `ox.Slider(min, max, step)`, `ox.Toggle`. Plain `str`, `int`, `float`, `bool` work too. Every control takes `label=`. `ox.Folder() | None = None` makes one optional.
 - Return `None`, a `str` (shown to the person), a JSON-able `dict` or `list` (for your page), or `ox.sound(path, title)`, `ox.midi(...)`, `ox.file(...)`, or a list of those. Metadata like `bpm=120, key="A minor"` goes after the title.
-- `ox.progress(fraction, label)`: fraction 0 to 1, or `None` when unknown. Call it often, also from library callbacks. When the person presses Stop it raises `ox.Cancelled`: clean up in `except ox.Cancelled:` and re-raise.
+- `ox.progress(fraction, label)`: fraction 0 to 1, or `None` when unknown. Call it often, also from library callbacks. When the person presses Stop it raises `ox.Cancelled` (a `BaseException`, so `except Exception` doesn't catch it): clean up in `except ox.Cancelled:` and re-raise.
 - A problem the person can fix: `raise ox.Problem("That file has no audio.", hint="Try a WAV or MP3.")`. Any other exception shows "The app ran into a problem" and the details go to the log.
 - `print` goes to the log. Don't write a server, threads, or `if __name__ == "__main__"`: 0x1audio runs the actions.
 
@@ -40,13 +40,15 @@ class ConvertTest(unittest.TestCase):
         run = ox.test(app.convert, files=["tests/tone.wav"], format="wav")
         self.assertEqual(run["items"][0]["title"], "tone")  # what reached the Library
 ```
-`ox.test` returns `{"result", "items", "progress"}`: what a page would get, the Library items, and each `(fraction, label)`.
+`ox.test` returns `{"result", "items", "progress"}`: what a page would get, the Library items (`id, kind, title, path, metadata`), and each `(fraction, label)`. `ox.test(..., stop_at=0.5)` presses Stop halfway, so the action raises `ox.Cancelled`. `ox.Problem` is raised as is.
 
 ## Helpers
 | Need | Use |
 | --- | --- |
 | File info | `ox.audio.probe(path)` → `.rate .channels .duration .codec` |
 | Another format | `ox.audio.convert(path, "wav" / "aiff" / "flac" / "mp3" / "aac" / "ogg" / "opus", folder=None)` → `Path` |
+| Samples (numpy) | `ox.audio.read(path)` → `(samples, rate)`, float32 shaped `(frames, channels)`; `ox.audio.write(samples, rate, "wav", folder=None, name="audio")` → `Path` |
+| A folder for new files | `ox.temp()` → an empty folder, removed when the app closes. `folder=None` above uses one. |
 | The app's own files | `ox.data.read / read_text / write / list / remove("presets/a.json")` (needs `data`) |
 
 ## app.json
@@ -71,7 +73,7 @@ class ConvertTest(unittest.TestCase):
 - Raise `version` before each release. Never change `name`.
 
 ## Dependencies
-Python packages go in `pyproject.toml` › `[project].dependencies`, wheels only. The SDK already has ffmpeg; don't add ffmpeg wrappers, pydub, or requests. Never commit models, audio, or files over 5 MB.
+Python packages go in `pyproject.toml` › `[project].dependencies`, wheels only; 0x1audio installs only those (`ox check` finds missing ones). numpy, scipy and soundfile are fine. The SDK already has ffmpeg; don't add ffmpeg wrappers, pydub, or requests. Never commit models, audio, or files over 5 MB.
 
 ## A page (only when the drawn form is not enough)
 A Vite + React page built to `dist/index.html`, set as `"page"`. It uses `@0x1audio/design-system` and calls the same actions:
@@ -88,6 +90,6 @@ Page API: `ox.run`, `ox.actions`, `ox.files.pick / fromDrop / read / reveal`, `o
 Say what it does for a musician: song, sound, file, folder, Library. Never: worker, manifest, SDK, ffmpeg. Sentence case. Buttons are verbs. No exclamation marks. Errors say what happened, then what to do.
 
 ## Never
-- Touch files other than the ones the person chose, files next to them, and `ox.data`.
+- Touch files other than the ones the person chose, files next to them, `ox.temp()` and `ox.data`.
 - Use `subprocess`, `os.system`, `eval`/`exec`, raw sockets, or telemetry.
 - Edit `AGENTS.md` or `dist/` by hand, or commit `.venv/` or `node_modules/`.

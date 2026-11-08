@@ -7,8 +7,11 @@ with progress and a Stop button.
 
 from __future__ import annotations
 
+import atexit
 import contextvars
 import inspect
+import shutil
+import tempfile
 import threading
 import time
 import types
@@ -35,8 +38,11 @@ class Problem(Exception):
         self.hint = hint
 
 
-class Cancelled(Exception):
-    """The person pressed Stop. ``ox.progress()`` raises it; let it propagate after you clean up."""
+class Cancelled(BaseException):
+    """The person pressed Stop. ``ox.progress()`` raises it; let it propagate after you clean up.
+
+    Like KeyboardInterrupt it is a BaseException, so ``except Exception`` never swallows Stop.
+    """
 
 
 class BadInput(Exception):
@@ -226,6 +232,7 @@ class _Running:
     report: Callable[[float | None, str], None]
     last_sent: float = 0.0
     last_label: str = ""
+    coalesce: bool = True
 
 
 _running: contextvars.ContextVar[_Running | None] = contextvars.ContextVar("ox_running", default=None)
@@ -251,7 +258,7 @@ def progress(fraction: float | None = None, label: str = "") -> None:
             fraction = None
     label = str(label or "")
     now = time.monotonic()
-    if label == current.last_label and fraction != 1.0 and now - current.last_sent < 0.05:
+    if current.coalesce and label == current.last_label and fraction != 1.0 and now - current.last_sent < 0.05:
         return
     current.last_sent = now
     current.last_label = label
@@ -360,10 +367,10 @@ def _bounds(control: Number) -> str:
     return ""
 
 
-def call(act: Action, given: object, *, ident: int = 0, cancel: threading.Event | None = None, report: Callable[[float | None, str], None] | None = None) -> object:
+def call(act: Action, given: object, *, ident: int = 0, cancel: threading.Event | None = None, report: Callable[[float | None, str], None] | None = None, coalesce: bool = True) -> object:
     """Run one action: bind the input, call the function, and turn what it returned into JSON."""
     values = bind(act, given)
-    state = _Running(id=ident, cancel=cancel or threading.Event(), report=report or (lambda fraction, label: None))
+    state = _Running(id=ident, cancel=cancel or threading.Event(), report=report or (lambda fraction, label: None), coalesce=coalesce)
     token = _running.set(state)
     try:
         returned = act.fn(**values)
@@ -414,15 +421,23 @@ def _export(item: Export) -> dict:
     return record
 
 
-def test(fn: Callable | str, **values: object) -> dict:
+def test(fn: Callable | str, *, stop_at: float | None = None, **values: object) -> dict:
     """Run an action here, without 0x1audio, the way the desktop would.
 
     Returns ``{"result", "items", "progress"}``: what the page would get, the
-    Library items it would add, and every ``(fraction, label)`` it reported.
+    Library items it would add (``id, kind, title, path, metadata``), and every
+    ``(fraction, label)`` it reported. ``stop_at=0.5`` presses Stop once progress
+    reaches half way, so the action's next ``ox.progress`` raises ``ox.Cancelled``.
     """
     act = find(fn)
     items: list[dict] = []
     reported: list[tuple[float | None, str]] = []
+    stop = threading.Event()
+
+    def report(fraction: float | None, label: str) -> None:
+        reported.append((fraction, label))
+        if stop_at is not None and fraction is not None and fraction >= stop_at:
+            stop.set()
 
     def sink(payload: dict) -> dict:
         item = {"id": str(len(items) + 1), "kind": payload["kind"], "title": payload["title"]}
@@ -431,7 +446,7 @@ def test(fn: Callable | str, **values: object) -> dict:
 
     token = sink_var.set(sink)
     try:
-        result = call(act, _plainify(values), report=lambda fraction, label: reported.append((fraction, label)))
+        result = call(act, _plainify(values), cancel=stop, report=report, coalesce=False)
     finally:
         sink_var.reset(token)
     return {"result": result, "items": items, "progress": reported}
@@ -446,6 +461,23 @@ def _plainify(values: dict) -> dict:
         return value
 
     return {key: plain(value) for key, value in values.items()}
+
+
+_temps: list[Path] = []
+
+
+def temp() -> Path:
+    """A new, empty folder for files the action makes. It is removed when the app closes,
+    after 0x1audio has copied returned sounds into the Library."""
+    folder = Path(tempfile.mkdtemp(prefix="ox1-"))
+    _temps.append(folder)
+    return folder
+
+
+@atexit.register
+def _remove_temps() -> None:
+    for folder in _temps:
+        shutil.rmtree(folder, ignore_errors=True)
 
 
 # --- words -----------------------------------------------------------------------------------
