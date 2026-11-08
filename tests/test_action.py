@@ -172,3 +172,17 @@ class ChoiceAndAudioTest(unittest.TestCase):
                 ox.audio.probe(notes)
         self.assertEqual(str(caught.exception), "notes.wav isn't a sound file 0x1audio can open.")
         self.assertNotIn("ffmpeg", str(caught.exception) + caught.exception.hint)
+
+
+class ConvertTest(unittest.TestCase):
+    def test_converting_next_to_the_original_never_replaces_it(self):
+        from ox1audio.cli import tone
+
+        with tempfile.TemporaryDirectory() as folder:
+            song = Path(folder) / "song.wav"
+            song.write_bytes(tone())
+            before = song.read_bytes()
+            out = ox.audio.convert(song, "wav", folder=song.parent)
+            self.assertEqual(out.name, "song 2.wav")
+            self.assertEqual(song.read_bytes(), before)
+            self.assertEqual(ox.audio.convert(song, "flac", folder=song.parent).name, "song.flac")

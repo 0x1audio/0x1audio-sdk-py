@@ -144,11 +144,15 @@ class _Plan:
 
 
 def convert(path: str | Path, format_id: str, folder: str | Path | None = None, on_progress: Callable[[float], None] | None = None) -> Path:
-    """Write ``path`` as ``format_id`` and return the new file."""
+    """Write ``path`` as ``format_id`` and return the new file.
+
+    It goes in ``folder`` (a new temporary folder when None) and never replaces a file
+    that is already there: next to the original, ``song.wav`` becomes ``song 2.wav``.
+    """
     source = probe(path)
     fmt = find(format_id)
     out = Path(folder) if folder else Path(tempfile.mkdtemp(prefix="ox1-audio-"))
-    target = out / f"{Path(source.name).stem}.{fmt.ext}"
+    target = _unused(out / f"{Path(source.name).stem}.{fmt.ext}")
     channels = source.channels if fmt.max_channels is None else min(source.channels, fmt.max_channels)
     rate = source.rate
     if fmt.rates and rate not in fmt.rates:
@@ -167,6 +171,16 @@ def convert(path: str | Path, format_id: str, folder: str | Path | None = None, 
     args += ["-f", fmt.muxer, "-progress", "pipe:1", "-nostats", str(target)]
     step = _Plan(source, fmt, target, args)
     return _run(step, on_progress)
+
+
+def _unused(path: Path) -> Path:
+    """Never write over a file that is there, the original included: song.wav, then song 2.wav."""
+    if not path.exists():
+        return path
+    number = 2
+    while path.with_name(f"{path.stem} {number}{path.suffix}").exists():
+        number += 1
+    return path.with_name(f"{path.stem} {number}{path.suffix}")
 
 
 def _run(step: _Plan, on_progress: Callable[[float], None] | None) -> Path:
