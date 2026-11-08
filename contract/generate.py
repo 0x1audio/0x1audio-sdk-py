@@ -590,7 +590,7 @@ def outputs() -> dict[Path, str]:
     if editor.parent.is_dir():
         found[editor] = json.dumps(c["schema"], indent=2, ensure_ascii=False) + "\n"
     found[HERE / "dist" / "go" / "appmanifest" / "manifest.gen.go"] = go(c)
-    # For packages/design-system/src/contract.gen.ts (the Design pod copies it in; see GAB-37).
+    # packages/design-system/src/contract.gen.ts is the Design pod's to copy in; --check compares it (see watched()).
     found[HERE / "dist" / "design-system" / "contract.gen.ts"] = typescript(c, "Design system copy: ActionForm's types.")
     index = ui_index()
     if index is not None:
@@ -631,6 +631,16 @@ def problems(found: dict[Path, str]) -> list[str]:
     return issues
 
 
+def watched() -> list[str]:
+    """Copies other pods keep in their own folders: checked, never written from here."""
+    issues = []
+    design = PROJECTS / "0x1audio-cloud" / "packages" / "design-system" / "src" / "contract.gen.ts"
+    source = HERE / "dist" / "design-system" / "contract.gen.ts"
+    if design.is_file() and source.is_file() and design.read_text() != source.read_text():
+        issues.append(f"{design} differs from {source}. Design pod: copy it over (cp {source} {design}).")
+    return issues
+
+
 def main(argv: list[str]) -> int:
     found = outputs()
     issues = problems(found)
@@ -642,6 +652,8 @@ def main(argv: list[str]) -> int:
         drift = [path for path, text in found.items() if not path.is_file() or path.read_text() != text]
         for path in drift:
             issues.append(f"{path} is out of date. Run: python contract/generate.py")
+        if "--only" not in argv or "design-system" in argv[argv.index("--only") + 1]:
+            issues += watched()
         for line in issues:
             print(line, file=sys.stderr)
         return 1 if issues else 0
