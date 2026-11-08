@@ -150,7 +150,7 @@ def find(fn_or_name: Callable | str) -> Action:
     found = _registry.get(name) if isinstance(name, str) else None
     if found is None:
         label = fn_or_name if isinstance(fn_or_name, str) else getattr(fn_or_name, "__name__", repr(fn_or_name))
-        raise LookupError(_teach(f"{label} is not an action.", f'decorate it with @ox.action("…")', "actions"))
+        raise LookupError(_teach(f"{label} is not an action.", 'decorate it with @ox.action("…")', "actions"))
     return found
 
 
