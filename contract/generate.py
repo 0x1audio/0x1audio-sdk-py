@@ -4,7 +4,7 @@
     python contract/generate.py --check    exit 1 and list what drifted (CI and tests run this)
 
 Sources (this folder): app.schema.json, errors.json, permissions.json, protocol.json,
-agents.md, llms.txt.
+agents.md, llms.txt, digest.md (the MCP start tool's short rules).
 
 Outputs:
     src/ox1audio/_contract.py                       the rules mixel check and the SDK read
@@ -268,6 +268,7 @@ def outputs() -> dict[Path, str]:
         pkg / "docs" / "protocol.md": protocol_doc(c),
         pkg / "docs" / "cli.md": cli_doc(),
         pkg / "docs" / "llms.txt": llms(c),
+        pkg / "docs" / "digest.md": (HERE / "digest.md").read_text(),
         pkg / "app.schema.json": json.dumps(c["schema"], indent=2, ensure_ascii=False) + "\n",
     }
     ts = PROJECTS / "0x1audio-sdk-ts" / "src"
