@@ -154,7 +154,7 @@ def serve(registered: Iterable[Action], *, stdin: BinaryIO | None = None, stdout
                 thread.join(timeout=3)
             # Let the reader see the end of input before Python shuts down; a daemon thread
             # still inside readline() at shutdown makes Python abort with a fatal error.
-            link.reader.join(timeout=2)
+            link.reader.join(timeout=0.5)
             return
         kind = message.get("type")
         ident = message.get("id")
