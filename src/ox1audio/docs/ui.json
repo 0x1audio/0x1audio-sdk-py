@@ -1,0 +1,232 @@
+{
+ "import": "import { Button, ... } from \"@0x1audio/design-system\"",
+ "rules": "Only these components and tokens below the hero; no hex colours; one filled Button per view; design empty, working, done and error states; check light and dark.",
+ "components": [
+  {
+   "name": "Button",
+   "group": "Actions",
+   "props": "className, variant, size, ...props",
+   "use": "variant = default (filled) · secondary · outline · ghost · destructive · outline-destructive · link; size = sm · default · lg · icon · icon-sm."
+  },
+  {
+   "name": "DropdownMenu",
+   "group": "Actions",
+   "props": "...props (MenuPrimitive.Root.Props)",
+   "use": "row actions, sort, and filters."
+  },
+  {
+   "name": "Tabs",
+   "group": "Actions",
+   "props": "className, ...props (TabsPrimitive.Root.Props)",
+   "use": "a segmented control for switching what a list shows (Sounds, MIDI, Other)."
+  },
+  {
+   "name": "Input",
+   "group": "Inputs",
+   "props": "className, type, ...props (React.ComponentProps<\"input\">)",
+   "use": "one field look: bg-field, a hairline border-input, shadow-xs, a stronger border on hover, the ink ring on focus."
+  },
+  {
+   "name": "Textarea",
+   "group": "Inputs",
+   "props": "className, ...props (React.ComponentProps<\"textarea\">)",
+   "use": "one field look: bg-field, a hairline border-input, shadow-xs, a stronger border on hover, the ink ring on focus."
+  },
+  {
+   "name": "Combobox",
+   "group": "Inputs",
+   "props": "items, value, onValueChange, placeholder, empty",
+   "use": "one field look: bg-field, a hairline border-input, shadow-xs, a stronger border on hover, the ink ring on focus."
+  },
+  {
+   "name": "InputOTP",
+   "group": "Inputs",
+   "props": "id, disabled, onValueChange",
+   "use": "one field look: bg-field, a hairline border-input, shadow-xs, a stronger border on hover, the ink ring on focus."
+  },
+  {
+   "name": "SearchField",
+   "group": "Inputs",
+   "props": "value, onChange, label, placeholder, size, className",
+   "use": "search in a toolbar."
+  },
+  {
+   "name": "Checkbox",
+   "group": "Inputs",
+   "props": "className, ...props (CheckboxPrimitive.Root.Props)",
+   "use": "as named."
+  },
+  {
+   "name": "Switch",
+   "group": "Inputs",
+   "props": "className, ...props (SwitchPrimitive.Root.Props)",
+   "use": "as named."
+  },
+  {
+   "name": "Slider",
+   "group": "Inputs",
+   "props": "className, ...props (SliderPrimitive.Root.Props<number>)",
+   "use": "as named."
+  },
+  {
+   "name": "FolderField",
+   "group": "Inputs",
+   "props": "value, onValueChange, onBrowse, placeholder, disabled, browseLabel, className",
+   "use": "as named."
+  },
+  {
+   "name": "PageHeader",
+   "group": "Structure",
+   "props": "title, eyebrow, description, actions, className, ...props",
+   "use": "every page."
+  },
+  {
+   "name": "PageSection",
+   "group": "Structure",
+   "props": "title, description, actions, className, children, ...props",
+   "use": "a titled part of a page, with at most one action (usually \"See all\")."
+  },
+  {
+   "name": "Card",
+   "group": "Structure",
+   "props": "className, ...props (React.ComponentProps<\"div\">)",
+   "use": "a raised surface for a group of related things."
+  },
+  {
+   "name": "Separator",
+   "group": "Structure",
+   "props": "className, orientation, ...props (SeparatorPrimitive.Props)",
+   "use": "between groups in a menu or a toolbar."
+  },
+  {
+   "name": "IconTile",
+   "group": "Structure",
+   "props": "size, tone, className, ...props",
+   "use": "an icon on a plate (empty states, step lists, settings hubs)."
+  },
+  {
+   "name": "EmptyState",
+   "group": "Feedback",
+   "props": "icon, title, description, actions, pixel, className, children, ...props",
+   "use": "what will appear here, and the first step (at most two actions)."
+  },
+  {
+   "name": "Callout",
+   "group": "Feedback",
+   "props": "tone, icon, title, actions, className, children, ...props",
+   "use": "a message inside the page."
+  },
+  {
+   "name": "Skeleton",
+   "group": "Feedback",
+   "props": "className, ...props (React.ComponentProps<\"div\">)",
+   "use": "loading, in the shape of the final layout."
+  },
+  {
+   "name": "Spinner",
+   "group": "Feedback",
+   "props": "className, ...props (React.ComponentProps<\"svg\">)",
+   "use": "inside a button that is working (\"Installing…\"), or a one-line status."
+  },
+  {
+   "name": "Progress",
+   "group": "Feedback",
+   "props": "className, pulse, indeterminate, value, ...props",
+   "use": "a job with a known size (value) or not (indeterminate)."
+  },
+  {
+   "name": "Badge",
+   "group": "Feedback",
+   "props": "className, tone, ...props",
+   "use": "a short status in a row or card (tone)."
+  },
+  {
+   "name": "Toaster",
+   "group": "Feedback",
+   "props": "theme, position, ...props (ToasterProps)",
+   "use": "bottom-right, one line, one optional action (usually Undo)."
+  },
+  {
+   "name": "Kbd",
+   "group": "Feedback",
+   "props": "className, ...props (React.ComponentProps<\"kbd\">)",
+   "use": "a key in a hint or a menu."
+  },
+  {
+   "name": "ListSummary",
+   "group": "Feedback",
+   "props": "className, ...props (React.ComponentProps<\"p\">)",
+   "use": "a list's closing line, \"Showing 3 of 40 sounds\"."
+  },
+  {
+   "name": "Waveform",
+   "group": "Audio",
+   "props": "audio, peaks",
+   "use": "the Library outside the desktop (cloud web, app pages)."
+  },
+  {
+   "name": "LibraryDialog",
+   "group": "Audio",
+   "props": "open, onOpenChange, onPick, multiple, disabled",
+   "use": "the Library outside the desktop (cloud web, app pages)."
+  },
+  {
+   "name": "Dropzone",
+   "group": "Audio",
+   "props": "title, description, dragging, disabled, multiple, onChoose, extra, className",
+   "use": "the Library outside the desktop (cloud web, app pages)."
+  },
+  {
+   "name": "ActionForm",
+   "group": "Audio",
+   "props": "action, host, openWith, className",
+   "use": "generated app UIs."
+  },
+  {
+   "name": "AppHero",
+   "group": "Audio",
+   "props": "icon, wordmark, description, art, accent, className",
+   "use": "generated app UIs."
+  }
+ ],
+ "tokens": {
+  "colour": [
+   "accent",
+   "accent-foreground",
+   "background",
+   "border",
+   "border-strong",
+   "brand",
+   "card",
+   "card-foreground",
+   "chrome",
+   "destructive",
+   "field",
+   "field-hover",
+   "foreground",
+   "hover",
+   "input",
+   "lit",
+   "muted",
+   "muted-foreground",
+   "popover",
+   "popover-foreground",
+   "pressed",
+   "primary",
+   "primary-foreground",
+   "ring",
+   "scrim",
+   "secondary",
+   "secondary-foreground",
+   "secondary-hover",
+   "secondary-pressed",
+   "selected",
+   "subtle-foreground",
+   "success",
+   "warning",
+   "warning-foreground",
+   "wave"
+  ],
+  "use_as": "bg-<token>, text-<token>, border-<token>"
+ }
+}

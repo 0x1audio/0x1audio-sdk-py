@@ -253,6 +253,77 @@ def llms(c: dict) -> str:
     return (HERE / "llms.txt").read_text().replace("{{docs}}", DOCS)
 
 
+# --- the design system, for the MCP ui_components tool -------------------------------------------
+
+
+def _signature(source: str, name: str) -> str:
+    """The props a component takes, from `function Name({ a, b = 1, ...props }: Type)`."""
+    import re
+
+    found = re.search(rf"^(?:export )?function {name}\(", source, re.M)
+    if not found:
+        return ""
+    i, depth = found.end(), 1
+    start = i
+    while i < len(source) and depth:
+        depth += {"(": 1, ")": -1}.get(source[i], 0)
+        i += 1
+    params = re.sub(r"//[^\n]*", "", source[start : i - 1]).strip()
+    if not params.startswith("{"):
+        return ""
+    depth, j = 0, 0
+    for j, char in enumerate(params):
+        depth += {"{": 1, "}": -1}.get(char, 0)
+        if depth == 0:
+            break
+    names = []
+    for part in re.split(r",(?![^{(\[]*[})\]])", params[1:j]):
+        part = part.strip()
+        if part:
+            names.append(part.split("=")[0].split(":")[0].strip())
+    kind = re.sub(r"\s+", " ", params[j + 1 :].lstrip(":").strip())
+    shown = ", ".join(name for name in names if name)
+    return shown + (f" ({kind})" if kind and "{" not in kind and len(kind) <= 70 else "")
+
+
+def ui_index() -> dict | None:
+    """Components an app page may use (DESIGN.md › Components, with their props) and the colour tokens."""
+    import re
+
+    ds = PROJECTS / "0x1audio-cloud" / "packages" / "design-system"
+    design = ds / "DESIGN.md"
+    if not design.is_file():
+        return None
+    text = design.read_text()
+    section = text.split("## Components", 1)[1].split("\n## ", 1)[0]
+    sources = "\n".join(path.read_text() for path in sorted((ds / "src" / "components").glob("*.tsx")))
+    skip = {"Sidebar*", "LibraryPlayer", "LibraryBrowser", "Tile", "SettingsGroup", "SettingsRow", "LibraryUploadButton"}
+    components = []
+    group = ""
+    for line in section.splitlines():
+        if line.startswith("### "):
+            group = line[4:].strip()
+            continue
+        found = re.match(r"- (\*\*`[^`]+`\*\*(?:, \*\*`[^`]+`\*\*)*)(?: / `[^`]+`)?: (.*)", line)
+        if not found:
+            continue
+        names = re.findall(r"`([^`]+)`", found.group(1))
+        use = re.sub(r"\*\*|`", "", found.group(2)).strip()
+        use = use.split(". ")[0].rstrip(".") + "."
+        for name in names:
+            if name in skip:
+                continue
+            components.append({"name": name, "group": group, "props": _signature(sources, name), "use": use[:160]})
+    theme = (ds / "src" / "theme.css").read_text()
+    colours = sorted(set(re.findall(r"--color-([a-z-]+)\s*:", theme)))
+    return {
+        "import": 'import { Button, ... } from "@0x1audio/design-system"',
+        "rules": "Only these components and tokens below the hero; no hex colours; one filled Button per view; design empty, working, done and error states; check light and dark.",
+        "components": components,
+        "tokens": {"colour": colours, "use_as": "bg-<token>, text-<token>, border-<token>"},
+    }
+
+
 # --- write or check ---------------------------------------------------------------------------
 
 
@@ -275,6 +346,9 @@ def outputs() -> dict[Path, str]:
     editor = PROJECTS / "0x1audio-cloud" / "apps" / "desktop" / "schema" / "app.schema.json"
     if editor.parent.is_dir():
         found[editor] = json.dumps(c["schema"], indent=2, ensure_ascii=False) + "\n"
+    index = ui_index()
+    if index is not None:
+        found[pkg / "docs" / "ui.json"] = json.dumps(index, indent=1, ensure_ascii=False) + "\n"
     ts = PROJECTS / "0x1audio-sdk-ts" / "src"
     if ts.is_dir():
         found[ts / "contract.gen.ts"] = typescript(c, "Page SDK copy.")
@@ -302,10 +376,10 @@ def problems(found: dict[Path, str]) -> list[str]:
         for bad in FORBIDDEN:
             if bad in text:
                 issues.append(f"{path.name} says `{bad}`, which would run a stranger's package. Use `uv tool install ox1audio`.")
-    agents_tokens, how = tokens(found[ROOT / "src" / "ox1audio" / "AGENTS.md"])
+    agents_tokens, how = tokens(found.get(ROOT / "src" / "ox1audio" / "AGENTS.md", ""))
     if agents_tokens > AGENTS_BUDGET:
         issues.append(f"AGENTS.md is {agents_tokens} tokens ({how}), over its {AGENTS_BUDGET} budget.")
-    llms_tokens, how = tokens(found[ROOT / "src" / "ox1audio" / "docs" / "llms.txt"])
+    llms_tokens, how = tokens(found.get(ROOT / "src" / "ox1audio" / "docs" / "llms.txt", ""))
     if llms_tokens > LLMS_BUDGET:
         issues.append(f"llms.txt is {llms_tokens} tokens ({how}), over its {LLMS_BUDGET} budget.")
     return issues
@@ -314,6 +388,10 @@ def problems(found: dict[Path, str]) -> list[str]:
 def main(argv: list[str]) -> int:
     found = outputs()
     issues = problems(found)
+    if "--only" in argv:
+        # e.g. --only desktop: just the files another repo's tests care about.
+        part = argv[argv.index("--only") + 1]
+        found = {path: text for path, text in found.items() if part in str(path)}
     if "--check" in argv:
         drift = [path for path, text in found.items() if not path.is_file() or path.read_text() != text]
         for path in drift:

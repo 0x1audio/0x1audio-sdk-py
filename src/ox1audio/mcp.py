@@ -70,6 +70,10 @@ TOOLS: list[tuple[str, str, dict, dict, dict]] = [
     ("app_test", "Check, then run tests/. Returns failures only, each with file:line.", _obj({"dir": _dir, "k": {"type": "string", "description": "Part of a test name"}}, ["dir"]),
      _obj({"ok": {"type": "boolean"}, "passed": {"type": "integer"}, "failed": {"type": "array"}, "errors": {"type": "array"}}),
      {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}),
+    ("ui_components", "Design-system components for a page: import, props, when to use each, and the colour tokens. q filters.",
+     _obj({"q": {"type": "string"}}),
+     _obj({"import": {"type": "string"}, "rules": {"type": "string"}, "components": {"type": "array"}, "tokens": {"type": "object"}}),
+     {"readOnlyHint": True, "openWorldHint": False}),
     ("app_status", "Review state and reviewer notes for the app's submissions. Needs mixel login.", _obj({"dir": _dir}, ["dir"]),
      _obj({"app": {"type": "string"}, "submissions": {"type": "array"}}),
      {"readOnlyHint": True, "openWorldHint": True}),
@@ -224,6 +228,23 @@ def app_test(args: dict) -> dict:
     if result.get("ok"):
         result.pop("log_tail", None)
     return result
+
+
+def ui_components(args: dict) -> dict:
+    path = DOCS / "ui.json"
+    if not path.is_file():
+        raise ToolError("unavailable", "This SDK was built without the design-system index.", "read DESIGN.md in @0x1audio/design-system")
+    index = json.loads(path.read_text())
+    words = [word for word in re.findall(r"[a-z0-9]+", str(args.get("q") or "").lower()) if len(word) > 1]
+    if words:
+        scored = []
+        for item in index["components"]:
+            text = f"{item['name']} {item['group']} {item['use']} {item['props']}".lower()
+            score = sum(text.count(word) + 5 * item["name"].lower().count(word) for word in words)
+            if score:
+                scored.append((score, item))
+        index["components"] = [item for _, item in sorted(scored, key=lambda pair: -pair[0])[:12]]
+    return index
 
 
 def app_status(args: dict) -> dict:

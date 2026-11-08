@@ -19,5 +19,5 @@ mixel = "ox1audio.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-ox1audio = ["py.typed", "AGENTS.md", "app.schema.json", "docs/*.md", "docs/llms.txt"]
+ox1audio = ["py.typed", "AGENTS.md", "app.schema.json", "docs/*.md", "docs/llms.txt", "docs/ui.json"]
 "ox1audio.cloud" = ["py.typed"]
