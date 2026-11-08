@@ -1,4 +1,8 @@
-"""Add a file to the Library. The desktop copies it and keeps the provenance."""
+"""Add a file to the Library. The desktop copies it and keeps the provenance.
+
+Most actions just return ``ox.sound(path, title)``. Call ``ox.library.add``
+only when a file must reach the Library before the action ends.
+"""
 
 from __future__ import annotations
 
@@ -26,5 +30,9 @@ def add(kind: str, path: str | Path, title: str, **metadata: object) -> object:
         return sink(payload)
     link = link_var.get()
     if link is None or not hasattr(link, "library"):
-        raise RuntimeError("Library export only works inside an app.")
+        raise RuntimeError(
+            "The Library is only there while 0x1audio runs the app.\n"
+            "fix:  in a test, run the action with ox.test(action, ...), which records Library items.\n"
+            "docs: https://docs.0x1audio.com/actions#results"
+        )
     return link.library(payload)

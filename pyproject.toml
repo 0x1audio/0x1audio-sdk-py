@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ox1audio"
-version = "0.2.1"
+version = "0.3.0"
 description = "Python SDK for the 0x1audio cloud and local app workers."
 requires-python = ">=3.11"
 dependencies = ["attrs>=24", "httpx>=0.27", "imageio-ffmpeg>=0.5"]
@@ -19,5 +19,5 @@ ox = "ox1audio.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-ox1audio = ["py.typed"]
+ox1audio = ["py.typed", "AGENTS.md"]
 "ox1audio.cloud" = ["py.typed"]

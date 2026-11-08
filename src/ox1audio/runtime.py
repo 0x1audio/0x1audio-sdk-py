@@ -1,4 +1,4 @@
-"""The worker link for the call that is running."""
+"""The link to the host, and the Library sink ``ox.test`` swaps in."""
 
 from __future__ import annotations
 
