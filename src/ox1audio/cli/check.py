@@ -295,6 +295,8 @@ def _imports(folder: Path) -> list[Finding]:
         except SyntaxError:
             continue
         optional = {id(inner) for node in ast.walk(tree) if isinstance(node, ast.Try) for inner in ast.walk(node)}
+        # `if TYPE_CHECKING:` imports never run.
+        optional |= {id(inner) for node in ast.walk(tree) if isinstance(node, ast.If) and _type_checking(node.test) for inner in ast.walk(node)}
         # Imports inside functions, or in files below the app's own folder (vendored code), may never run: warn.
         lazy = {id(inner) for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) for inner in ast.walk(node)}
         nested = len(rel.parts) > 1
@@ -319,6 +321,12 @@ def _imports(folder: Path) -> list[Finding]:
                     severity = "warn" if nested or id(node) in lazy else "error"
                     found.append(Finding("dependency_missing", f"{rel}:{node.lineno}", f"{rel} imports {top}, but pyproject.toml doesn't list it, so 0x1audio won't install it.", f'add "{_dist_names.get(top, top)}" to pyproject.toml › [project].dependencies', "actions#dependencies", severity))
     return found
+
+
+def _type_checking(test) -> bool:
+    import ast
+
+    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING")
 
 
 _dist_names = {"yaml": "pyyaml", "sklearn": "scikit-learn", "PIL": "pillow", "cv2": "opencv-python"}

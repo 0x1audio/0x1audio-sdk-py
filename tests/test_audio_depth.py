@@ -36,6 +36,16 @@ class BitDepthTest(unittest.TestCase):
         self.assertIsNone(ox.audio.probe(mp3).bits)
         self.assertEqual(ox.audio.probe(ox.audio.convert(mp3, "wav")).bits, 24)
 
+    def test_write_is_24_bit_unless_asked(self):
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy is not installed")
+        tone = np.zeros((4410, 2), dtype="float32")
+        for kind in ("wav", "aiff", "flac"):
+            self.assertEqual(ox.audio.probe(ox.audio.write(tone, 44100, kind)).bits, 24, kind)
+        self.assertEqual(ox.audio.probe(ox.audio.write(tone, 44100, "wav", bits=16)).bits, 16)
+
     def test_a_wrong_depth_names_the_fix(self):
         with self.assertRaisesRegex(ValueError, r"16, 24 or 32[\s\S]*fix:"):
             ox.audio.convert(self.song, "wav", bits=20)

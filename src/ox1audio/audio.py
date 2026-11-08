@@ -313,12 +313,16 @@ def read(path: str | Path):
     return samples[: samples.size // info.channels * info.channels].reshape(-1, info.channels).copy(), info.rate
 
 
-def write(samples, rate: int, format_id: str = "wav", folder: str | Path | None = None, name: str = "audio") -> Path:
+def write(samples, rate: int, format_id: str = "wav", folder: str | Path | None = None, name: str = "audio", bits: int | None = None) -> Path:
     """Write samples (``(frames, channels)`` or one channel) as a new file and return it.
 
     It goes in ``folder`` (a new temporary folder when None) as ``name.<ext>``, never over
-    a file that is there.
+    a file that is there. WAV, AIFF and FLAC are 24-bit unless ``bits`` says 16 (or 32).
     """
+    if bits is not None and bits not in (16, 24, 32):
+        from ox1audio.action import _teach
+
+        raise ValueError(_teach(f"ox.audio.write(bits={bits!r}): the bit depth is 16, 24 or 32.", 'ox.audio.write(samples, rate, "wav", bits=16)', "actions#helpers"))
     np = _numpy()
     data = np.asarray(samples, dtype="<f4")
     if data.ndim == 1:
@@ -336,7 +340,8 @@ def write(samples, rate: int, format_id: str = "wav", folder: str | Path | None 
         out_rate = max(lower) if lower else min(fmt.rates)
     else:
         out_rate = rate
-    args = [ffmpeg(), "-hide_banner", "-nostdin", "-v", "error", "-f", "f32le", "-ar", str(rate), "-ac", str(data.shape[1]), "-i", "-", "-c:a", fmt.encoder, "-ar", str(out_rate), "-ac", str(channels)]
+    depth = Info(path="", name=name, codec="pcm_f32le", rate=rate, channels=data.shape[1], duration=0.0, bitrate=None, bits=24)
+    args = [ffmpeg(), "-hide_banner", "-nostdin", "-v", "error", "-f", "f32le", "-ar", str(rate), "-ac", str(data.shape[1]), "-i", "-", *_codec(fmt, depth, bits), "-ar", str(out_rate), "-ac", str(channels)]
     if fmt.bitrates:
         args += ["-b:a", f"{fmt.bitrates[-1]}k"]
     args += [*fmt.extra, "-f", fmt.muxer, str(target)]

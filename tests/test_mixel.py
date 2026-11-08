@@ -85,6 +85,14 @@ class CheckTest(Scratch):
         self.assertIn("banned_api", strict.stdout)
 
 
+class TypeCheckingTest(Scratch):
+    def test_type_checking_imports_are_not_dependencies(self):
+        app = self.new_app()
+        (app / "app.py").write_text("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from somewhere_else import Thing\n" + (app / "app.py").read_text())
+        done = mixel("check", "--strict", cwd=app)
+        self.assertEqual(done.returncode, 0, done.stdout)
+
+
 class TestAndRunTest(Scratch):
     def test_a_new_app_passes_mixel_test(self):
         app = self.new_app()
