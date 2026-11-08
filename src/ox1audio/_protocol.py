@@ -38,11 +38,11 @@ import traceback
 from collections.abc import Iterable
 from typing import BinaryIO
 
-from ox1audio import __version__
+from ox1audio import __version__, _contract
 from ox1audio.action import Action, BadInput, Cancelled, Problem, call, stopped_message
 from ox1audio.runtime import link_var
 
-PROTOCOL = 1
+PROTOCOL = _contract.PROTOCOL
 
 
 class Link:
@@ -54,7 +54,8 @@ class Link:
         self._next = 1
         self._pending: dict[int, queue.Queue[dict]] = {}
         self._incoming: queue.Queue[dict | None] = queue.Queue()
-        threading.Thread(target=self._read, name="ox1audio-link", daemon=True).start()
+        self.reader = threading.Thread(target=self._read, name="ox1audio-link", daemon=True)
+        self.reader.start()
 
     def next_message(self) -> dict | None:
         return self._incoming.get()
@@ -121,7 +122,7 @@ def ready(registered: Iterable[Action]) -> dict:
     needed: set[str] = set()
     for act in listed:
         needed |= act.permissions()
-    order = ["files", "library", "network", "data"]
+    order = _contract.PERMISSIONS
     return {
         "type": "ready",
         "protocol": PROTOCOL,
@@ -151,6 +152,9 @@ def serve(registered: Iterable[Action], *, stdin: BinaryIO | None = None, stdout
                     event.set()
             for thread in workers:
                 thread.join(timeout=3)
+            # Let the reader see the end of input before Python shuts down; a daemon thread
+            # still inside readline() at shutdown makes Python abort with a fatal error.
+            link.reader.join(timeout=2)
             return
         kind = message.get("type")
         ident = message.get("id")

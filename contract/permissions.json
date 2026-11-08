@@ -1,0 +1,23 @@
+{
+  "$comment": "The permission codes. text is what the install sheet shows; uses is what in the code needs it. Generates the docs table and the code lists.",
+  "files": {
+    "text": "Read and write files you pick",
+    "uses": "Files and Folder controls; files next to the ones chosen",
+    "short": "Files and Folder controls"
+  },
+  "library": {
+    "text": "Add to your Library",
+    "uses": "returning ox.sound, ox.midi or ox.file; ox.library.add; the page's ox.library",
+    "short": "returning sounds"
+  },
+  "data": {
+    "text": "Keep its own files",
+    "uses": "ox.data in Python and on the page",
+    "short": "`ox.data`"
+  },
+  "network": {
+    "text": "Use the network",
+    "uses": "reaching the listed hosts only (downloads, page fetch)",
+    "short": ""
+  }
+}

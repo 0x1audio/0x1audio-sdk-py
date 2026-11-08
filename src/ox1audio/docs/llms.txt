@@ -1,0 +1,17 @@
+# Mixel apps
+
+> Build focused audio tools that run on the person's computer: typed Python actions (`@ox.action`), an optional design-system page, published to a reviewed registry. Install the CLI with `uv tool install ox1audio`. Start with AGENTS.md; check every change with `mixel check`.
+
+## Start
+- [AGENTS.md](https://docs.0x1audio.com/agents.md): the whole contract for coding agents, under 2k tokens
+- [First app](https://docs.0x1audio.com/start.md): mixel new, mixel dev, mixel publish
+
+## Reference
+- [app.json](https://docs.0x1audio.com/reference/app-json.md): every field and its rule
+- [Errors](https://docs.0x1audio.com/errors.md): every code mixel, Mixel and the registry use, with its fix
+- [CLI](https://docs.0x1audio.com/reference/cli.md): mixel commands and flags
+- [Permissions](https://docs.0x1audio.com/reference/permissions.md): files, library, data, network
+
+## Optional
+- [Protocol](https://docs.0x1audio.com/reference/protocol.md): how Mixel talks to an app's Python
+- MCP: `mixel mcp` runs a local MCP server with check, test, run and docs tools

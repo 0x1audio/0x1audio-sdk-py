@@ -1,7 +1,7 @@
 """app.json v1, checked the way 0x1audio reads it. Used by ``mixel check``.
 
-The desktop has the same rules in TypeScript (electron/apps/schema.ts). GAB-37
-generates both from one contract; until then, change them together.
+The rules (fields, patterns, limits, permission codes) come from the contract
+(sdk-py/contract, generated into _contract.py), as do the desktop's.
 """
 
 from __future__ import annotations
@@ -11,15 +11,17 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-SCHEMA = "https://0x1audio.com/schema/app/v1.json"
+from ox1audio import _contract as rules
+
+SCHEMA = rules.SCHEMA
 DOCS = "https://docs.0x1audio.com"
-CODES = ("files", "library", "network", "data")
-FIELDS = ("$schema", "name", "displayName", "summary", "version", "sdk", "entry", "page", "permissions", "accent", "icon", "window", "tags")
-_name = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
-_version = re.compile(r"^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$")
-_range = re.compile(r"^\^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})(\.(0|[1-9][0-9]{0,3}))?$")
-_accent = re.compile(r"^#[0-9a-fA-F]{6}$")
-_host = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$")
+CODES = tuple(rules.PERMISSIONS)
+FIELDS = tuple(rules.FIELDS)
+_name = re.compile(rules.NAME_PATTERN)
+_version = re.compile(rules.VERSION_PATTERN)
+_range = re.compile(rules.SDK_PATTERN)
+_accent = re.compile(rules.ACCENT_PATTERN)
+_host = re.compile(rules.HOST_PATTERN)
 
 
 @dataclass
@@ -80,12 +82,12 @@ def check(folder: Path) -> Manifest:
         elif key not in FIELDS:
             bad("manifest_field", key, f"{key} is not a field.", f"remove it; the fields are {', '.join(FIELDS)}")
     name = data.get("name")
-    if not isinstance(name, str) or not 2 <= len(name) <= 48 or not _name.match(name):
+    if not isinstance(name, str) or not rules.NAME_LENGTH[0] <= len(name) <= rules.NAME_LENGTH[1] or not _name.match(name):
         bad("manifest_name", "name", "name is 2 to 48 lowercase letters, digits and dashes, and never changes.", f'"name": "{_slug(str(data.get("displayName") or "my-app"))}"')
     display = data.get("displayName")
-    if not isinstance(display, str) or not display.strip() or len(display) > 48:
+    if not isinstance(display, str) or not display.strip() or len(display) > rules.DISPLAY_NAME_MAX:
         bad("manifest_display_name", "displayName", "displayName is the name people see, up to 48 characters.", '"displayName": "My App"')
-    if "summary" in data and (not isinstance(data["summary"], str) or len(data["summary"]) > 80):
+    if "summary" in data and (not isinstance(data["summary"], str) or not data["summary"].strip() or len(data["summary"]) > rules.SUMMARY_MAX):
         bad("manifest_summary", "summary", "summary is one sentence, up to 80 characters.", '"summary": "One file to many formats at once."')
     if not isinstance(data.get("version"), str) or not _version.match(data["version"]):
         bad("manifest_version", "version", "version is MAJOR.MINOR.PATCH.", '"version": "0.1.0"')
@@ -128,15 +130,26 @@ def check(folder: Path) -> Manifest:
                     bad("network_hosts", "permissions.network", "network says why, and which hosts.", '"network": { "why": "Download the model once.", "hosts": ["github.com"] }', "network")
                     continue
                 reason, hosts = reason.get("why"), reason.get("hosts")
-                if not isinstance(hosts, list) or not hosts or any(not isinstance(h, str) or not _host.match(h) or h == "localhost" or re.fullmatch(r"[0-9.]+", h) for h in hosts):
+                if not isinstance(hosts, list) or not hosts or len(hosts) > rules.HOSTS_MAX or any(not isinstance(h, str) or not _host.match(h) or h == "localhost" or re.fullmatch(r"[0-9.]+", h) for h in hosts):
                     bad("network_hosts", "permissions.network.hosts", "hosts lists the domains the app reaches. The whole web, IPs and localhost are refused.", '"hosts": ["github.com"]', "network")
-            if not isinstance(reason, str) or not 12 <= len(reason.strip()) <= 120:
+            low, high = rules.REASON_LENGTH
+            if not isinstance(reason, str) or not low <= len(reason.strip()) <= high:
                 bad("permission_reason", f"permissions.{code}", "Each permission has a reason the person reads: one sentence, 12 to 120 characters.", f'"{code}": "{_example_reason(code)}"', "permissions")
     if "accent" in data and (not isinstance(data["accent"], str) or not _accent.match(data["accent"])):
         bad("manifest_accent", "accent", "accent is a colour like #3366ff.", '"accent": "#5b8cff"')
     icon = data.get("icon")
     if icon is not None and (not isinstance(icon, str) or not icon.lower().endswith((".svg", ".png")) or not (folder / icon).is_file()):
         bad("manifest_icon", "icon", "icon is a square .svg or .png inside the app.", '"icon": "icon.svg"')
+    window = data.get("window")
+    if window is not None:
+        sizes = window if isinstance(window, dict) else {}
+        wrong = [key for key, value in sizes.items() if key not in rules.WINDOW or isinstance(value, bool) or not isinstance(value, int) or not rules.WINDOW[key][0] <= value <= rules.WINDOW[key][1]]
+        if not isinstance(window, dict) or not window or wrong:
+            ranges = ", ".join(f"{key} {low}-{high}" for key, (low, high) in rules.WINDOW.items())
+            bad("manifest_window", f"window.{wrong[0]}" if wrong else "window", f"window sizes are whole pixels: {ranges}.", '"window": { "width": 900, "height": 640 }')
+    tags = data.get("tags")
+    if tags is not None and (not isinstance(tags, list) or len(tags) > rules.TAGS_MAX or any(not isinstance(tag, str) or not tag or len(tag) > 64 or re.search(r"\s", tag) for tag in tags)):
+        bad("manifest_tags", "tags", f"tags is up to {rules.TAGS_MAX} single words.", '"tags": ["convert"]')
     return Manifest(data, found)
 
 

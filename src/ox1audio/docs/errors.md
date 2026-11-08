@@ -1,0 +1,73 @@
+# Errors
+
+Every error has a code, what happened, and the fix. The message you see names the exact fix for your case; this page is the index.
+
+## From mixel check (and the registry)
+
+| Code | Means | Usual fix |
+| --- | --- | --- |
+| `manifest_missing` | There is no app.json in the folder. | mixel new "My App" starts one. |
+| `manifest_json` | app.json is not valid JSON. | Fix the JSON at the line shown. |
+| `manifest_v0` | app.json has no "$schema": it is the old v0 format. | Add "$schema" and "sdk", rename worker.entry to entry and frontend to page, give each permission a reason. |
+| `manifest_schema` | "$schema" is not the v1 URL. | "$schema": "https://0x1audio.com/schema/app/v1.json" |
+| `manifest_field` | A field app.json doesn't have, or one that was renamed. | Remove or rename it as the message says. |
+| `manifest_name` | name is not 2 to 48 lowercase letters, digits and dashes. | "name": "my-app". It never changes after the first publish. |
+| `manifest_display_name` | displayName is missing or over 48 characters. | "displayName": "My App" |
+| `manifest_summary` | summary is not one sentence of up to 80 characters. | "summary": "One file to many formats at once." |
+| `manifest_version` | version is not MAJOR.MINOR.PATCH, or not above the last published one. | "version": "0.1.0", raised before each publish. |
+| `manifest_entry` | entry is missing, not a .py file, or not in the app. | "entry": "app.py" |
+| `manifest_page` | page is not an .html file in the app, or it isn't built. | npm run build, then "page": "dist/index.html" |
+| `manifest_accent` | accent is not a colour like #5b8cff. | "accent": "#5b8cff" |
+| `manifest_icon` | icon is not a square .svg or .png in the app. | "icon": "icon.svg" |
+| `manifest_window` | window sizes are whole pixels within the allowed range. | "window": { "width": 900, "height": 640 } |
+| `manifest_tags` | tags is more than 5 single words. | "tags": ["convert"] |
+| `sdk_missing` | app.json has no sdk range. | "sdk": "^0.3" |
+| `sdk_range` | sdk is not a caret range this SDK satisfies. | "sdk": "^0.3" |
+| `permission_undeclared` | The code uses a permission app.json doesn't ask for. | mixel check --fix adds it; then write the reason in your own words. |
+| `permission_unused` | app.json asks for a permission the code doesn't use. | Remove it, so people aren't asked for more than the app needs. |
+| `permission_unknown` | Not a permission. They are files, library, data and network. | Use one of files, library, data, network. |
+| `permission_reason` | A permission without a reason of 12 to 120 characters. | One sentence that tells the person why, like "Open the songs you choose." |
+| `network_hosts` | network without a list of hosts, or with the whole web, an IP or localhost. | "network": { "why": "Download the model once.", "hosts": ["github.com"] } |
+| `dependency_missing` | The code imports a package pyproject.toml doesn't list, so Mixel won't install it. | Add it to pyproject.toml › [project].dependencies. |
+| `dependency_not_installed` | A listed package isn't installed where mixel runs, so the actions couldn't be loaded. | uv venv && uv pip install -r pyproject.toml |
+| `banned_api` | The code runs programs or opens raw sockets (subprocess, os.system, ctypes, socket). | Use ox.audio.convert, ox.audio.read or ox.audio.write instead of running programs. |
+| `app_failed_to_load` | The entry file raised an error while loading. | Fix the error at the line shown; the message names the fix. |
+| `no_actions` | The entry file has no @ox.action functions. | @ox.action("Title") above a function makes it an action. |
+
+## When an action runs (pages see these as OxError.code)
+
+| Code | Means | Usual fix |
+| --- | --- | --- |
+| `bad_input` | The input doesn't fit the action's controls. Python never sees it. | Send each control's value, as the message says. |
+| `problem` | The action raised ox.Problem: something the person can fix. | Show the message and hint to the person. |
+| `cancelled` | The person pressed Stop. kept lists what the action finished before. | Nothing to fix. Show what was kept. |
+| `crashed` | The action raised an unexpected error, or the app stopped. | Read the log (mixel dev prints it), fix the line, run again. |
+| `timeout` | The action ran longer than its timeout. | @ox.action("Title", timeout=3600), and call ox.progress so Stop works. |
+| `permission_denied` | The page used a file the person didn't choose, or a permission they turned off. | Use ox.files.pick or a Files control; ask the person to allow it. |
+| `permission_undeclared` | The app used a permission app.json doesn't declare. Declared is binding. | Add it to app.json › permissions with a reason. |
+| `unavailable` | The page isn't running inside Mixel, or the app has no actions. | Open the app in Mixel (mixel dev). |
+
+## From the mixel command
+
+| Code | Means | Usual fix |
+| --- | --- | --- |
+| `usage` | The command line is wrong. | mixel --help |
+| `folder_not_empty` | mixel new would write into a folder that has files. | Choose another name. |
+| `no_tests` | There are no tests in tests/. | Add tests/test_app.py with a unittest that calls ox.test(...). |
+| `tests_did_not_run` | The test runner itself failed. | Run python -m unittest in the app's folder to see the whole error. |
+| `no_such_action` | mixel run named an action the app doesn't have. | Use a name mixel check lists. |
+| `no_such_topic` | mixel docs named a page that doesn't exist. | mixel docs --list |
+| `desktop_unavailable` | Mixel isn't running, or developer mode is off. | Open Mixel and turn on Settings › Developer mode. |
+| `desktop_error` | The desktop refused or failed a dev request. | Follow the message; mixel doctor checks the setup. |
+| `not_signed_in` | No sign-in, or it expired. | mixel login |
+| `expired_token` | The pairing code expired before it was confirmed. | mixel login |
+| `network` | Mixel's cloud couldn't be reached. | Check the connection. MIXEL_API sets another address. |
+| `registry_unavailable` | This cloud doesn't take that request from the CLI yet. | Update the server, or set MIXEL_API. |
+| `registry_error` | The registry refused the request. | Follow the message and its doc link. |
+| `git_missing` | git isn't installed. | Install git. |
+| `git_failed` | A git command failed. | The app's folder must be a git repository pushed to GitHub. |
+| `git_dirty` | There are changes that aren't committed. | git add -A && git commit -m "…" && git push |
+| `git_not_pushed` | The commit isn't on GitHub yet. | git push |
+| `not_repo_root` | The app isn't at the top of its git repository. | Give the app its own repository. |
+| `not_github` | The remote isn't a GitHub repository. | Push the app to a public GitHub repository. |
+| `library_search_off` | Library search for agents is off, or not built yet. | The person turns it on in Mixel › Settings › Library. |
