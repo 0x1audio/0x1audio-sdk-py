@@ -152,6 +152,8 @@ def check(folder: Path) -> Manifest:
         if not isinstance(window, dict) or not window or wrong:
             ranges = ", ".join(f"{key} {low}-{high}" for key, (low, high) in rules.WINDOW.items())
             bad("manifest_window", f"window.{wrong[0]}" if wrong else "window", f"window sizes are whole pixels: {ranges}.", '"window": { "width": 900, "height": 640 }')
+    if "license" in data and (not isinstance(data["license"], str) or len(data["license"]) > 64 or not re.match(rules.LICENSE_PATTERN, data["license"])):
+        bad("manifest_license", "license", f"license {json.dumps(data['license'])} is not an SPDX identifier.", '"license": "Apache-2.0"')
     tags = data.get("tags")
     if tags is not None and (not isinstance(tags, list) or len(tags) > rules.TAGS_MAX or any(not isinstance(tag, str) or not tag or len(tag) > 64 or re.search(r"\s", tag) for tag in tags)):
         bad("manifest_tags", "tags", f"tags is up to {rules.TAGS_MAX} single words.", '"tags": ["convert"]')

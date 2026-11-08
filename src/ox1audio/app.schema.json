@@ -162,6 +162,12 @@
         "pattern": "^\\S+$"
       },
       "description": "Up to 5 words for the catalog, like \"convert\"."
+    },
+    "license": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9.+-]+(?: (?:AND|OR|WITH) [A-Za-z0-9.+-]+)*$",
+      "description": "The app's licence, an SPDX identifier like \"Apache-2.0\". mixel new writes Apache-2.0; change it if you choose another."
     }
   },
   "$defs": {

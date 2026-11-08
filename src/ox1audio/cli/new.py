@@ -5,12 +5,14 @@ from __future__ import annotations
 import io
 import json
 import math
+import re
 import struct
 import wave
 from pathlib import Path
 
 from ox1audio import __version__
 from ox1audio.cli.out import FAILED, OK, Stop
+from ox1audio._contract import LICENSE_PATTERN
 from ox1audio.manifest import SCHEMA
 
 APP = '''import ox1audio as ox
@@ -57,6 +59,7 @@ PYPROJECT = """[project]
 name = "{slug}"
 version = "0.1.0"
 requires-python = ">=3.11"
+license = "{license}"
 dependencies = []
 """
 
@@ -75,13 +78,23 @@ mixel dev     # open it in Mixel, reload on save
 
 
 def command(args: list[str]) -> int:
-    title = " ".join(arg for arg in args if not arg.startswith("--")).strip()
+    license = "Apache-2.0"
+    words = []
+    rest = iter(args)
+    for arg in rest:
+        if arg == "--license" or arg.startswith("--license="):
+            license = arg.split("=", 1)[1] if "=" in arg else next(rest, "")
+            if not re.match(LICENSE_PATTERN, license):
+                raise Stop(f"{license or 'That'} is not an SPDX licence identifier.", fix='mixel new "Make It Louder" --license MIT', doc="reference/app-json#license")
+        elif not arg.startswith("--"):
+            words.append(arg)
+    title = " ".join(words).strip()
     if not title:
         raise Stop('mixel new needs a name.', fix='mixel new "Make It Louder"', doc="start")
-    return new(Path.cwd() / slug(title), title)
+    return new(Path.cwd() / slug(title), title, license)
 
 
-def new(directory: Path, title: str) -> int:
+def new(directory: Path, title: str, license: str = "Apache-2.0") -> int:
     if directory.exists() and any(directory.iterdir()):
         raise Stop(f"{directory.name}/ already has files in it.", fix=f'choose another name, or delete {directory.name}/', code=FAILED, error="folder_not_empty")
     name = directory.name
@@ -96,6 +109,7 @@ def new(directory: Path, title: str) -> int:
             "version": "0.1.0",
             "sdk": f"^{'.'.join(__version__.split('.')[:2])}",
             "entry": "app.py",
+            "license": license,
             "permissions": {
                 "files": "Open the songs you choose.",
                 "library": "Save the converted copies to your Library.",
@@ -104,10 +118,13 @@ def new(directory: Path, title: str) -> int:
         "AGENTS.md": agents_md(),
         "tests/__init__.py": "",
         "tests/test_app.py": TEST,
-        "pyproject.toml": PYPROJECT.format(slug=name),
+        "pyproject.toml": PYPROJECT.format(slug=name, license=license),
         "README.md": README.format(title=title, summary=summary),
         ".gitignore": GITIGNORE,
     }
+    # Apache-2.0 by default, like Mixel's own apps. Another licence: bring its text as LICENSE.
+    if license == "Apache-2.0":
+        files["LICENSE"] = Path(__file__).resolve().parents[1].joinpath("templates", "Apache-2.0.txt").read_text()
     for file, body in files.items():
         target = directory / file
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -120,6 +137,7 @@ def new(directory: Path, title: str) -> int:
         "AGENTS.md": "the whole API, for you and your coding agent",
         "tests/test_app.py": "runs convert on tests/tone.wav",
         "pyproject.toml": "Python packages your app needs",
+        "LICENSE": "Apache-2.0; mixel new --license MIT picks another" if license == "Apache-2.0" else f"add the {license} text here",
     }
     width = max(len(file) for file in notes)
     for file, note in notes.items():

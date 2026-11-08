@@ -15,6 +15,7 @@
     "manifest_accent": ["accent is not a colour like #5b8cff.", "\"accent\": \"#5b8cff\""],
     "manifest_icon": ["icon is not a square .svg or .png in the app.", "\"icon\": \"icon.svg\""],
     "manifest_window": ["window sizes are whole pixels within the allowed range.", "\"window\": { \"width\": 900, \"height\": 640 }"],
+    "manifest_license": ["license is not an SPDX identifier.", "\"license\": \"Apache-2.0\" (or MIT, GPL-3.0-only, ...)"],
     "manifest_tags": ["tags is more than 5 single words.", "\"tags\": [\"convert\"]"],
     "sdk_missing": ["app.json has no sdk range.", "\"sdk\": \"^0.3\""],
     "sdk_range": ["sdk is not a caret range this SDK satisfies.", "\"sdk\": \"^0.3\""],

@@ -17,5 +17,6 @@ Every app has an `app.json` at the top of its folder. `$schema` is `https://0x1a
 | `icon` | optional | A square .svg or .png inside the app. |
 | `window` | optional | The size the app's window opens at, in pixels. |
 | `tags` | optional | Up to 5 words for the catalog, like "convert". |
+| `license` | optional | The app's licence, an SPDX identifier like "Apache-2.0". mixel new writes Apache-2.0; change it if you choose another. |
 
 Window sizes in pixels: `width` 400–2560, `height` 320–1600, `minWidth` 400–2560, `minHeight` 320–1600. Reasons are 12 to 120 characters.

@@ -61,6 +61,7 @@ class ConvertTest(unittest.TestCase):
   "version": "0.1.0",
   "sdk": "^0.3",
   "entry": "app.py",
+  "license": "Apache-2.0",
   "permissions": {
     "files": "Open the songs you choose.",
     "library": "Save the converted copies to your Library."
@@ -69,7 +70,7 @@ class ConvertTest(unittest.TestCase):
 }
 ```
 - Permissions are binding: `files` (Files and Folder controls), `library` (returning sounds), `data` (`ox.data`), `network` as `{"why": "…", "hosts": ["example.com"]}`. Ask only for what the code uses. Each reason is one sentence, 12 to 120 characters, that tells the person why.
-- Optional: `icon` (a square `.svg` or `.png` in the app), `window` (`{"width", "height", "minWidth", "minHeight"}`), `tags` (up to 5), `page` (below).
+- Optional: `icon` (a square `.svg` or `.png` in the app), `window` (`{"width", "height", "minWidth", "minHeight"}`), `tags` (up to 5), `license` (SPDX), `page` (below).
 - Raise `version` before each release. Never change `name`.
 
 ## Dependencies
@@ -84,7 +85,7 @@ import { ActionForm } from "@0x1audio/design-system"
 export const App = () => <ActionForm action="convert" />   // the form 0x1audio draws; build around it
 // your own controls: await ox.run("convert", { files, format }, { onProgress: (f, label) => {}, onEvent: (name, body) => {}, signal })
 ```
-Page API: `ox.run`, `ox.actions`, `ox.files.pick / fromDrop / read / reveal`, `ox.library.list / add / file / onChange`, `ox.data.*`, `ox.app.open`. Errors are `OxError` with `.code` (`cancelled` after Stop, with `.kept`). `ox.emit("partial", body)` in Python reaches `onEvent`. Use design-system components and tokens only, no hex colours; light and dark both work.
+Page API: `ox.run`, `ox.actions`, `ox.files.pick / fromDrop / read / reveal`, `ox.library.list / add / file / onChange`, `ox.data.*`, `ox.app.open`. Errors are `OxError` with `.code` (`cancelled` after Stop, with `.kept`). `ox.emit("partial", body)` in Python reaches `onEvent`. Use design-system components and tokens only, no hex colours. Mixel sets `.dark` on `<html>`; check both themes.
 
 ## Words (what the person sees)
 Say what it does for a musician: song, sound, file, folder, Library. Never: worker, manifest, SDK, ffmpeg. Sentence case. Buttons are verbs. No exclamation marks. Errors say what happened, then what to do.

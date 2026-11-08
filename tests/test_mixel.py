@@ -52,6 +52,27 @@ class HelpTest(Scratch):
         self.assertIn("Next\n  cd make-it-louder\n  mixel check", made.stdout)
 
 
+class LicenseTest(Scratch):
+    def test_new_apps_are_apache_unless_the_author_picks_another(self):
+        app = self.new_app()
+        self.assertIn("Apache License", (app / "LICENSE").read_text())
+        self.assertEqual(json.loads((app / "app.json").read_text())["license"], "Apache-2.0")
+        self.assertIn('license = "Apache-2.0"', (app / "pyproject.toml").read_text())
+        made = mixel("new", "Other One", "--license", "MIT", cwd=self.root)
+        self.assertEqual(made.returncode, 0, made.stderr)
+        self.assertFalse((self.root / "other-one" / "LICENSE").exists())
+        self.assertEqual(json.loads((self.root / "other-one" / "app.json").read_text())["license"], "MIT")
+        self.assertEqual(mixel("new", "Bad", "--license", "Apache 2", cwd=self.root).returncode, 2)
+
+    def test_check_refuses_a_license_that_is_not_spdx(self):
+        app = self.new_app()
+        data = json.loads((app / "app.json").read_text())
+        data["license"] = "Apache 2"
+        (app / "app.json").write_text(json.dumps(data))
+        done = mixel("check", "--json", cwd=app)
+        self.assertEqual([item["code"] for item in json.loads(done.stdout)["errors"]], ["manifest_license"])
+
+
 class CheckTest(Scratch):
     def test_json_has_codes_and_fixes(self):
         app = self.new_app()

@@ -6,7 +6,7 @@ Install or update it with `uv tool install ox1audio`. It runs on macOS, Linux an
 
 | Command | Does | Options |
 | --- | --- | --- |
-| `mixel new "My App"` | start an app in ./my-app |  |
+| `mixel new "My App"` | start an app in ./my-app (Apache-2.0 unless --license names another) | `--license SPDX` |
 | `mixel dev` | open this app in Mixel, reload it on save |  |
 
 ## Check

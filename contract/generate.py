@@ -76,6 +76,7 @@ def rules(c: dict) -> dict:
         "REASON_LENGTH": [reason["minLength"], reason["maxLength"]],
         "WINDOW": {key: [value["minimum"], value["maximum"]] for key, value in window.items()},
         "TAGS_MAX": props["tags"]["maxItems"],
+        "LICENSE_PATTERN": props["license"]["pattern"],
         "PROTOCOL": c["protocol"]["version"],
         "CONTROLS": c["protocol"]["controls"],
         "RUN_ERRORS": list(c["errors"]["run"]),
@@ -176,7 +177,7 @@ export interface ErrorBody {{
     if "desktop" in where.lower():
         shared += f"""
 // app.json rules (the desktop's schema.ts reads these; a test fails if they drift).
-export const manifestRules = {json.dumps({k: r[k] for k in ("FIELDS", "NAME_PATTERN", "NAME_LENGTH", "DISPLAY_NAME_MAX", "SUMMARY_MAX", "VERSION_PATTERN", "SDK_PATTERN", "ACCENT_PATTERN", "HOST_PATTERN", "HOSTS_MAX", "REASON_LENGTH", "WINDOW", "TAGS_MAX")}, indent=2)} as const
+export const manifestRules = {json.dumps({k: r[k] for k in ("FIELDS", "NAME_PATTERN", "NAME_LENGTH", "DISPLAY_NAME_MAX", "SUMMARY_MAX", "VERSION_PATTERN", "SDK_PATTERN", "ACCENT_PATTERN", "HOST_PATTERN", "HOSTS_MAX", "REASON_LENGTH", "WINDOW", "TAGS_MAX", "LICENSE_PATTERN")}, indent=2)} as const
 
 export const limits = {{ line: {c['protocol']['lineLimit']}, result: {c['protocol']['resultLimit']}, event: {c['protocol']['eventLimit']}, progressPerSecond: {c['protocol']['progressPerSecond']} }} as const
 """
@@ -488,7 +489,7 @@ def go(c: dict) -> str:
     return GO_TEMPLATE % {
         "schema": json.dumps(r["SCHEMA"]), "fields": strings(r["FIELDS"]), "codes": strings(r["PERMISSIONS"]),
         "name": quote(r["NAME_PATTERN"]), "version": quote(r["VERSION_PATTERN"]), "sdk": quote(r["SDK_PATTERN"]),
-        "accent": quote(r["ACCENT_PATTERN"]), "host": quote(host),
+        "accent": quote(r["ACCENT_PATTERN"]), "license": quote(r["LICENSE_PATTERN"]), "host": quote(host),
         "name_min": r["NAME_LENGTH"][0], "name_max": r["NAME_LENGTH"][1], "display": r["DISPLAY_NAME_MAX"], "summary": r["SUMMARY_MAX"],
         "reason_min": r["REASON_LENGTH"][0], "reason_max": r["REASON_LENGTH"][1], "hosts_max": r["HOSTS_MAX"], "host_len": host_len,
         "tags_max": r["TAGS_MAX"], "window": ", ".join(f"{json.dumps(k)}: {{{v[0]}, {v[1]}}}" for k, v in r["WINDOW"].items()),
