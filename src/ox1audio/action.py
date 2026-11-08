@@ -413,7 +413,17 @@ def _json(value: object, name: str, where: str) -> object:
 def _export(item: Export) -> dict:
     from ox1audio.library import add
 
-    stored = add(item.kind, item.path, item.title or item.path.stem, **item.metadata)
+    metadata = dict(item.metadata)
+    if item.kind == "sound" and "duration" not in metadata:
+        # The Library shows a sound's length; read it here so every app gets it for free.
+        try:
+            from ox1audio.audio import probe
+
+            info = probe(item.path)
+            metadata.update(duration=round(info.duration, 3), rate=info.rate, channels=info.channels)
+        except Exception:  # noqa: BLE001 - a sound the probe can't read still goes to the Library
+            pass
+    stored = add(item.kind, item.path, item.title or item.path.stem, **metadata)
     record = dict(stored) if isinstance(stored, dict) else {}
     record.setdefault("kind", item.kind)
     record.setdefault("title", item.title or item.path.stem)
