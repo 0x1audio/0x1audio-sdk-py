@@ -31,7 +31,12 @@ class Finding:
     message: str
     fix: str
     anchor: str
-    severity: str = "error"
+    # "error" or "warn". Left out, it is the code's severity in contract/errors.json.
+    severity: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.severity:
+            self.severity = rules.ERRORS.get(self.code, {}).get("severity", "error")
 
     @property
     def doc(self) -> str:
@@ -65,7 +70,7 @@ def check(folder: Path) -> Manifest:
         return Manifest({}, [Finding("manifest_json", "app.json", "app.json must be an object.", f'start from {{ "$schema": "{SCHEMA}", ... }}', "fields")])
     found: list[Finding] = []
 
-    def bad(code: str, where: str, message: str, fix: str, anchor: str = "fields", severity: str = "error") -> None:
+    def bad(code: str, where: str, message: str, fix: str, anchor: str = "fields", severity: str = "") -> None:
         found.append(Finding(code, f"app.json › {where}" if where else "app.json", message, fix, anchor, severity))
 
     if "$schema" not in data:

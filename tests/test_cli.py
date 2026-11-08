@@ -99,7 +99,8 @@ class ImportsTest(NewAndCheckTest):
         app = self.new_app()
         (app / "app.py").write_text("import subprocess\n" + (app / "app.py").read_text())
         code, out = self.check(app)
-        self.assertIn("warn   banned_api  app.py:1", out)
+        self.assertEqual(code, 1)
+        self.assertIn("error  banned_api  app.py:1", out)
 
 
 class AgentsTest(unittest.TestCase):

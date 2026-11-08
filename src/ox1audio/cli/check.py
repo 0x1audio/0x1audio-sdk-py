@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ox1audio.cli import out
+from ox1audio.cli import _safety, out
 from ox1audio.cli.out import FAILED, OK, Stop
 from ox1audio.manifest import Finding, check as check_manifest
 
@@ -21,6 +21,8 @@ class Report:
     findings: list[Finding] = field(default_factory=list)
     actions: list = field(default_factory=list)
     fixed: list[str] = field(default_factory=list)
+    # The hosts the code's URLs name, for the network permission --fix writes.
+    hosts: list[str] = field(default_factory=list)
 
     @property
     def errors(self) -> list[Finding]:
@@ -101,6 +103,13 @@ def _run(folder: Path) -> Report:
     data = manifest.data
     worker = data.get("worker")
     entry = data.get("entry") or (worker.get("entry") if isinstance(worker, dict) else None)
+    safety = _safety.scan(folder, _skip, _local(folder))
+    report.findings += safety.findings
+    report.hosts = safety.hosts
+    if safety.findings:
+        # Code that runs programs or reaches around the rules is not run, not even to list its actions.
+        report.findings += _imports(folder, safety.banned_imports)
+        return report
     if isinstance(entry, str) and (folder / entry).is_file():
         loaded, problem = _load_in_app(folder, folder / entry)
         if problem:
@@ -111,10 +120,20 @@ def _run(folder: Path) -> Report:
             for item in loaded:
                 used |= item.permissions()
             used |= _static_permissions(folder)
-            report.findings += _imports(folder)
+            if safety.network:
+                used.add("network")
+            report.findings += _imports(folder, safety.banned_imports)
             declared = manifest.permissions
             if data.get("$schema"):
                 for code in sorted(used - declared):
+                    if code == "network":
+                        hosts = json.dumps(safety.hosts[:3] or ["example.com"])
+                        report.findings.append(Finding(
+                            "permission_undeclared", "app.json › permissions.network",
+                            f"The code reaches the network ({safety.network[0]}), but app.json doesn't ask for it.",
+                            f'add "network": {{"why": "Download the model once.", "hosts": {hosts}}} to permissions (or run mixel check --fix), then say why in your own words', "permissions",
+                        ))
+                        continue
                     report.findings.append(Finding(
                         "permission_undeclared", f"app.json › permissions.{code}",
                         f"The code uses {code} ({_why_used(code)}), but app.json doesn't ask for it.",
@@ -122,10 +141,11 @@ def _run(folder: Path) -> Report:
                     ))
                 permissions = data.get("permissions") if isinstance(data.get("permissions"), dict) else {}
                 for code, reason in permissions.items():
+                    reason = reason.get("why") if isinstance(reason, dict) else reason
                     if isinstance(reason, str) and reason.strip().upper().startswith("TODO"):
                         report.findings.append(Finding("permission_reason", f"app.json › permissions.{code}", f"The reason for {code} is still a TODO.", f'write it for the person, like "{_reason(code)}"; they read it before they install', "permissions", "warn"))
                 for code in sorted(declared - used - {"network"}):
-                    report.findings.append(Finding("permission_unused", f"app.json › permissions.{code}", f"app.json asks for {code}, but the code doesn't seem to use it.", "remove it, so people aren't asked for more than the app needs", "permissions", "warn"))
+                    report.findings.append(Finding("permission_unused", f"app.json › permissions.{code}", f"app.json asks for {code}, but the code doesn't seem to use it.", "remove it, so people aren't asked for more than the app needs", "permissions"))
     return report
 
 
@@ -178,7 +198,7 @@ def _fix(folder: Path, report: Report) -> list[str]:
     if not isinstance(permissions, dict):
         permissions = {}
     for code in missing:
-        permissions[code] = _todo(code)
+        permissions[code] = {"why": _todo(code), "hosts": report.hosts[:10]} if code == "network" else _todo(code)
     data["permissions"] = permissions
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     return fixed + [f"permissions.{code} added with a TODO reason: write it, people read it before they install" for code in missing]
@@ -264,29 +284,29 @@ def _static_permissions(folder: Path) -> set[str]:
     return used
 
 
-_banned = {
-    "subprocess": "use ox.audio.convert, ox.audio.read or ox.audio.write instead of running programs",
-    "os.system": "use ox.audio.convert, ox.audio.read or ox.audio.write instead of running programs",
-    "ctypes": "remove it",
-    "socket": "remove it; network access goes through declared hosts",
-}
+_skip = {".venv", "tests", "node_modules", "dist", "__pycache__"}
 
 
-def _imports(folder: Path) -> list[Finding]:
-    """Python packages the code imports but pyproject.toml doesn't list (0x1audio installs only those), and banned APIs."""
+def _local(folder: Path) -> set[str]:
+    # Anything that is a module or folder somewhere in the app counts as its own code (vendored trees add themselves to sys.path).
+    return {path.stem for path in folder.rglob("*.py")} | {path.name for path in folder.rglob("*") if path.is_dir()}
+
+
+def _imports(folder: Path, refused: set[str] = frozenset()) -> list[Finding]:  # type: ignore[assignment]
+    """Python packages the code imports but pyproject.toml doesn't list (0x1audio installs only those).
+    ``refused`` are packages mixel check already refuses (requests): never ask to add those."""
     import ast
 
     import warnings
 
     stdlib = set(sys.stdlib_module_names)
-    # Anything that is a module or folder somewhere in the app counts as its own code (vendored trees add themselves to sys.path).
-    local = {path.stem for path in folder.rglob("*.py")} | {path.name for path in folder.rglob("*") if path.is_dir()}
+    local = _local(folder)
     declared = _declared(folder)
     found: list[Finding] = []
-    seen: set[str] = set()
+    seen: set[str] = set(refused)
     for path in sorted(folder.rglob("*.py")):
         rel = path.relative_to(folder)
-        if set(rel.parts) & {".venv", "tests", "node_modules", "dist", "__pycache__"}:
+        if set(rel.parts) & _skip:
             continue
         try:
             with warnings.catch_warnings():
@@ -306,14 +326,8 @@ def _imports(folder: Path) -> list[Finding]:
                 names = [alias.name for alias in node.names]
             elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                 names = [node.module]
-            elif isinstance(node, ast.Attribute) and node.attr == "system" and isinstance(node.value, ast.Name) and node.value.id == "os":
-                names = ["os.system"]
             for name in names:
                 top = name.split(".")[0]
-                key = name if name in _banned else top
-                if key in _banned and f"{key}:{rel}" not in seen:
-                    seen.add(f"{key}:{rel}")
-                    found.append(Finding("banned_api", f"{rel}:{node.lineno}", f"{key} is not allowed in apps.", _banned[key], "actions#never", "warn"))
                 if top in stdlib or top in local or top == "ox1audio" or top in seen or id(node) in optional:
                     continue
                 if _normal(top) not in declared and _normal(_dist_names.get(top, top)) not in declared:

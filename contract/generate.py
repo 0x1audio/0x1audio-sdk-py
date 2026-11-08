@@ -79,7 +79,7 @@ def rules(c: dict) -> dict:
         "PROTOCOL": c["protocol"]["version"],
         "CONTROLS": c["protocol"]["controls"],
         "RUN_ERRORS": list(c["errors"]["run"]),
-        "ERRORS": {code: {"area": area, "means": means, "fix": fix} for area, codes in c["errors"].items() for code, (means, fix) in codes.items()},
+        "ERRORS": {code: {"area": area, "means": entry[0], "fix": entry[1], "severity": entry[2] if len(entry) > 2 else "error"} for area, codes in c["errors"].items() for code, entry in codes.items()},
     }
 
 
@@ -211,10 +211,10 @@ def app_json_doc(c: dict) -> str:
 
 def errors_doc(c: dict) -> str:
     titles = {"check": "From mixel check (and the registry)", "run": "When an action runs (pages see these as OxError.code)", "cli": "From the mixel command"}
-    lines = ["# Errors", "", "Every error has a code, what happened, and the fix. The message you see names the exact fix for your case; this page is the index.", ""]
+    lines = ["# Errors", "", "Every error has a code, what happened, and the fix. The message you see names the exact fix for your case; this page is the index. Codes marked (warning) don't fail `mixel check`, but `--strict` and publish refuse them too.", ""]
     for area, codes in c["errors"].items():
         lines += [f"## {titles[area]}", "", "| Code | Means | Usual fix |", "| --- | --- | --- |"]
-        lines += [f"| `{code}` | {means} | {fix.replace('|', '/')} |" for code, (means, fix) in codes.items()]
+        lines += [f"| `{code}`{' (warning)' if entry[2:] == ['warn'] else ''} | {entry[0]} | {entry[1].replace('|', '/')} |" for code, entry in codes.items()]
         lines.append("")
     return "\n".join(lines)
 

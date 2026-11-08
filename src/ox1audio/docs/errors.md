@@ -1,6 +1,6 @@
 # Errors
 
-Every error has a code, what happened, and the fix. The message you see names the exact fix for your case; this page is the index.
+Every error has a code, what happened, and the fix. The message you see names the exact fix for your case; this page is the index. Codes marked (warning) don't fail `mixel check`, but `--strict` and publish refuse them too.
 
 ## From mixel check (and the registry)
 
@@ -24,13 +24,14 @@ Every error has a code, what happened, and the fix. The message you see names th
 | `sdk_missing` | app.json has no sdk range. | "sdk": "^0.3" |
 | `sdk_range` | sdk is not a caret range this SDK satisfies. | "sdk": "^0.3" |
 | `permission_undeclared` | The code uses a permission app.json doesn't ask for. | mixel check --fix adds it; then write the reason in your own words. |
-| `permission_unused` | app.json asks for a permission the code doesn't use. | Remove it, so people aren't asked for more than the app needs. |
+| `permission_unused` (warning) | app.json asks for a permission the code doesn't use. | Remove it, so people aren't asked for more than the app needs. |
 | `permission_unknown` | Not a permission. They are files, library, data and network. | Use one of files, library, data, network. |
 | `permission_reason` | A permission without a reason of 12 to 120 characters. | One sentence that tells the person why, like "Open the songs you choose." |
 | `network_hosts` | network without a list of hosts, or with the whole web, an IP or localhost. | "network": { "why": "Download the model once.", "hosts": ["github.com"] } |
 | `dependency_missing` | The code imports a package pyproject.toml doesn't list, so Mixel won't install it. | Add it to pyproject.toml › [project].dependencies. |
 | `dependency_not_installed` | A listed package isn't installed where mixel runs, so the actions couldn't be loaded. | uv venv && uv pip install -r pyproject.toml |
-| `banned_api` | The code runs programs or opens raw sockets (subprocess, os.system, ctypes, socket). | Use ox.audio.convert, ox.audio.read or ox.audio.write instead of running programs. |
+| `banned_api` | The code runs programs, opens raw sockets, runs code from strings, or imports by a name it builds (subprocess, os.system, socket, ctypes, eval, exec, __import__, requests). | Use ox.audio.convert, ox.audio.read or ox.audio.write instead of programs; urllib.request with a declared network for downloads; plain imports. |
+| `path_outside` | The code opens a fixed path outside the app, like /etc/passwd, /tmp or the home folder. | Use the files the person chooses (ox.Files, ox.Folder), ox.temp() or ox.data. |
 | `app_failed_to_load` | The entry file raised an error while loading. | Fix the error at the line shown; the message names the fix. |
 | `no_actions` | The entry file has no @ox.action functions. | @ox.action("Title") above a function makes it an action. |
 

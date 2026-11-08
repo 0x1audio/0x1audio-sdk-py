@@ -78,11 +78,13 @@ class CheckTest(Scratch):
 
     def test_strict_fails_on_warnings(self):
         app = self.new_app()
-        (app / "app.py").write_text("import subprocess\n" + (app / "app.py").read_text())
+        data = json.loads((app / "app.json").read_text())
+        data["permissions"]["data"] = "Remember your settings on this computer."
+        (app / "app.json").write_text(json.dumps(data))
         self.assertEqual(mixel("check", cwd=app).returncode, 0)
         strict = mixel("check", "--strict", cwd=app)
         self.assertEqual(strict.returncode, 1)
-        self.assertIn("banned_api", strict.stdout)
+        self.assertIn("warn   permission_unused", strict.stdout)
 
 
 class TypeCheckingTest(Scratch):
