@@ -120,6 +120,8 @@ def _run(folder: Path) -> Report:
             for item in loaded:
                 used |= item.permissions()
             used |= _static_permissions(folder)
+            page = _page_permissions(folder) - used
+            used |= page
             if safety.network:
                 used.add("network")
             report.findings += _imports(folder, safety.banned_imports)
@@ -136,7 +138,7 @@ def _run(folder: Path) -> Report:
                         continue
                     report.findings.append(Finding(
                         "permission_undeclared", f"app.json › permissions.{code}",
-                        f"The code uses {code} ({_why_used(code)}), but app.json doesn't ask for it.",
+                        f"The code uses {code} ({f'the page calls ox.{code}' if code in page else _why_used(code)}), but app.json doesn't ask for it.",
                         f'add "{code}": "{_reason(code)}" to permissions (or run mixel check --fix), then say why in your own words', "permissions",
                     ))
                 permissions = data.get("permissions") if isinstance(data.get("permissions"), dict) else {}
@@ -272,7 +274,7 @@ _data = re.compile(r"\bdata\.(read|read_text|write|list|remove|root)\(|OX1_DATA"
 
 def _static_permissions(folder: Path) -> set[str]:
     used: set[str] = set()
-    for path in folder.rglob("*.py"):
+    for path in _sources(folder, {".py"}, _skip | {".git"}):
         parts = set(path.relative_to(folder).parts)
         if parts & {".venv", "tests", "node_modules", "dist", "__pycache__"}:
             continue
@@ -284,12 +286,48 @@ def _static_permissions(folder: Path) -> set[str]:
     return used
 
 
+def _page_permissions(folder: Path) -> set[str]:
+    """The page asks the host directly (ox.data, ox.files, ox.library), so its source counts too."""
+    used: set[str] = set()
+    for path in _sources(folder, {".ts", ".tsx", ".js", ".jsx", ".mjs"}, _skip | {"test", ".git"}):
+        text = path.read_text(errors="replace")
+        for code, pattern in _page_uses.items():
+            if pattern.search(text):
+                used.add(code)
+    return used
+
+
+def _sources(folder: Path, suffixes: set[str], skip: set[str]):
+    """Files with these suffixes, never walking into skipped folders (node_modules is large)."""
+    import os
+
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = [name for name in dirs if name not in skip]
+        for name in files:
+            if Path(name).suffix in suffixes:
+                yield Path(root) / name
+
+
+_page_uses = {
+    "data": re.compile(r"\box\.data\.(list|read|readText|write|remove)\("),
+    "files": re.compile(r"\box\.files\.(pick|fromDrop|read|reveal)\(|\box\.library\.file\("),
+    "library": re.compile(r"\box\.library\.(list|add|file|onChange)\("),
+}
+
+
 _skip = {".venv", "tests", "node_modules", "dist", "__pycache__"}
 
 
 def _local(folder: Path) -> set[str]:
-    # Anything that is a module or folder somewhere in the app counts as its own code (vendored trees add themselves to sys.path).
-    return {path.stem for path in folder.rglob("*.py")} | {path.name for path in folder.rglob("*") if path.is_dir()}
+    """Anything that is a module or folder somewhere in the app counts as its own code (vendored trees add
+    themselves to sys.path). Never .venv or node_modules: an installed requests is not the app's own."""
+    import os
+
+    names: set[str] = set()
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = [name for name in dirs if name not in _skip | {".git"}]
+        names |= set(dirs) | {Path(name).stem for name in files if name.endswith(".py")}
+    return names
 
 
 def _imports(folder: Path, refused: set[str] = frozenset()) -> list[Finding]:  # type: ignore[assignment]
@@ -304,7 +342,7 @@ def _imports(folder: Path, refused: set[str] = frozenset()) -> list[Finding]:  #
     declared = _declared(folder)
     found: list[Finding] = []
     seen: set[str] = set(refused)
-    for path in sorted(folder.rglob("*.py")):
+    for path in sorted(_sources(folder, {".py"}, _skip | {".git"})):
         rel = path.relative_to(folder)
         if set(rel.parts) & _skip:
             continue

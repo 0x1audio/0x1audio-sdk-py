@@ -226,6 +226,19 @@ class CheckTest(unittest.TestCase):
         self.assertEqual(done.returncode, 1)
         self.assertEqual(json.loads(done.stdout)["errors"][0]["where"], "helper.so")
 
+    def test_an_installed_package_is_not_the_apps_own_code(self):
+        (self.app / ".venv" / "lib" / "requests").mkdir(parents=True)
+        self.prepend("import requests")
+        done = mixel("check", "--json", cwd=self.app)
+        self.assertEqual([item["code"] for item in json.loads(done.stdout)["errors"]], ["banned_api"])
+
+    def test_the_page_counts_for_permissions(self):
+        (self.app / "src").mkdir()
+        (self.app / "src" / "app.tsx").write_text('await ox.data.write("loops/a.json", "{}")\n')
+        done = mixel("check", "--json", cwd=self.app)
+        errors = json.loads(done.stdout)["errors"]
+        self.assertEqual([(item["code"], item["where"]) for item in errors], [("permission_undeclared", "app.json › permissions.data")])
+
     def test_tests_may_run_programs(self):
         (self.app / "tests" / "test_tools.py").write_text("import subprocess\n")
         self.assertEqual(mixel("check", "--strict", cwd=self.app).returncode, 0)

@@ -81,11 +81,15 @@ class Scan:
 def scan(folder: Path, skip: set[str], local: set[str] = frozenset()) -> Scan:  # type: ignore[assignment]
     """Every .py file in the app outside ``skip`` folders, plus native binaries it carries.
     ``local`` names the app's own modules: ``import code`` of its own code.py is fine."""
+    import os
+
     found = Scan()
-    for path in sorted(folder.rglob("*")):
+    paths = []
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = [name for name in dirs if name not in skip and name != ".git"]
+        paths += [Path(root) / name for name in files]
+    for path in sorted(paths):
         rel = path.relative_to(folder)
-        if set(rel.parts) & skip or not path.is_file():
-            continue
         if path.suffix.lower() in {".so", ".pyd", ".dylib", ".dll", ".exe"}:
             found.findings.append(Finding("banned_api", str(rel), f"{rel} is a compiled binary, which the review can't read.", NATIVE, DOC))
         elif path.suffix == ".py":
