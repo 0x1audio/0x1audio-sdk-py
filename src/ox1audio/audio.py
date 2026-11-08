@@ -27,6 +27,10 @@ class Info:
     channels: int
     duration: float
     bitrate: int | None
+    # Bit depth of PCM and lossless sources (16, 24, 32), None for lossy ones like MP3.
+    bits: int | None = None
+    # True for 32-bit float PCM.
+    float: bool = False
 
 
 @dataclass(frozen=True)
@@ -104,15 +108,34 @@ def probe(path: str | Path) -> Info:
         hours, minutes, seconds = found.groups()
         duration = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
     bitrate = int(stream.group(5)) if stream.group(5) else None
+    codec = stream.group(1).split(" ")[0]
+    bits, is_float = _depth(codec, stream.group(4) or "")
     return Info(
         path=str(source),
         name=source.name,
-        codec=stream.group(1).split(" ")[0],
+        codec=codec,
         rate=int(stream.group(2)),
         channels=channel_count(stream.group(3)),
         duration=duration,
         bitrate=bitrate,
+        bits=bits,
+        float=is_float,
     )
+
+
+def _depth(codec: str, sample: str) -> tuple[int | None, bool]:
+    """The bit depth ffmpeg reports, like "s16" or "s32 (24 bit)". Lossy decoders report float: None."""
+    raw = re.search(r"\((\d+) bit\)", sample)
+    if raw:
+        return int(raw.group(1)), False
+    name = sample.strip().split(" ")[0].rstrip("p")
+    if name in {"flt", "dbl"}:
+        return (32, True) if codec.startswith("pcm_f") else (None, False)
+    if name in {"u8", "s16"}:
+        return 16, False
+    if name in {"s32", "s64"}:
+        return 32, False
+    return None, False
 
 
 def channel_count(layout: str) -> int:
@@ -143,12 +166,24 @@ class _Plan:
     args: list[str] = field(default_factory=list)
 
 
-def convert(path: str | Path, format_id: str, folder: str | Path | None = None, on_progress: Callable[[float], None] | None = None) -> Path:
+def convert(
+    path: str | Path,
+    format_id: str,
+    folder: str | Path | None = None,
+    on_progress: Callable[[float], None] | None = None,
+    bits: int | None = None,
+) -> Path:
     """Write ``path`` as ``format_id`` and return the new file.
 
     It goes in ``folder`` (a new temporary folder when None) and never replaces a file
     that is already there: next to the original, ``song.wav`` becomes ``song 2.wav``.
+    WAV, AIFF and FLAC keep the source's bit depth (24-bit from lossy sources like MP3);
+    ``bits=16`` or ``24`` (or ``32`` for WAV and AIFF) asks for another.
     """
+    if bits is not None and bits not in (16, 24, 32):
+        from ox1audio.action import _teach
+
+        raise ValueError(_teach(f"ox.audio.convert(bits={bits!r}): the bit depth is 16, 24 or 32.", 'ox.audio.convert(path, "wav", bits=16)', "actions#helpers"))
     source = probe(path)
     fmt = find(format_id)
     out = Path(folder) if folder else _temp()
@@ -162,7 +197,7 @@ def convert(path: str | Path, format_id: str, folder: str | Path | None = None, 
         ffmpeg(), "-hide_banner", "-nostdin", "-y",
         "-i", source.path,
         "-map", "0:a:0", "-vn", "-sn", "-dn",
-        "-c:a", fmt.encoder if not fmt.lossless or fmt.id in {"flac"} else fmt.encoder,
+        *_codec(fmt, source, bits),
         "-ar", str(rate), "-ac", str(channels),
     ]
     if fmt.bitrates:
@@ -171,6 +206,21 @@ def convert(path: str | Path, format_id: str, folder: str | Path | None = None, 
     args += ["-f", fmt.muxer, "-progress", "pipe:1", "-nostats", str(target)]
     step = _Plan(source, fmt, target, args)
     return _run(step, on_progress)
+
+
+def _codec(fmt: Format, source: Info, bits: int | None) -> list[str]:
+    """The encoder for ``fmt``. Lossless targets keep the source's depth: a 16-bit WAV stays 16-bit."""
+    if not fmt.lossless:
+        return ["-c:a", fmt.encoder]
+    depth = bits or source.bits or 24
+    floating = bits is None and source.float
+    if fmt.id == "flac":
+        # FLAC is integer only, up to 24 bits here.
+        return ["-c:a", "flac", "-sample_fmt", "s16"] if depth <= 16 else ["-c:a", "flac", "-sample_fmt", "s32", "-bits_per_raw_sample", "24"]
+    endian = "be" if fmt.id == "aiff" else "le"
+    if floating:
+        return ["-c:a", f"pcm_f32{endian}"]
+    return ["-c:a", f"pcm_s{depth if depth in (16, 24, 32) else 24}{endian}"]
 
 
 def _unused(path: Path) -> Path:
@@ -219,7 +269,12 @@ def _run(step: _Plan, on_progress: Callable[[float], None] | None) -> Path:
         tail = [line.strip() for line in errors if line.strip()][-3:]
         raise RuntimeError(" ".join(tail) or f"ffmpeg exited with {process.returncode}.")
     if on_progress:
-        on_progress(1.0)
+        try:
+            on_progress(1.0)
+        except BaseException:
+            # Stop pressed as the file finished: the same rule as during it, no file left behind.
+            discard()
+            raise
     return step.target
 
 
