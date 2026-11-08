@@ -117,6 +117,14 @@ class McpTest(unittest.TestCase):
         found = self.session.tool("ui_components", q="progress loading")["structuredContent"]["components"]
         self.assertIn(found[0]["name"], {"Progress", "Skeleton"})
 
+    def test_ui_components_describe_the_exported_waveform_not_a_private_one(self):
+        index = self.session.tool("ui_components", q="waveform")["structuredContent"]
+        wave = next(item for item in index["components"] if item["name"] == "Waveform")
+        self.assertEqual(wave["props"], "label: string, detail?: string, wave?: Wave | null, empty: string, className?: string")
+        self.assertNotIn("peaks", wave["props"])
+        self.assertIn("waveformFrom(source: Blob | Uint8Array, bars = 120): Promise<Wave>", index["helpers"])
+        self.assertEqual(index["types"]["Wave"], "{ peaks: number[]; seconds: number }")
+
     def test_library_search_is_a_read_only_stub_until_gab_112(self):
         result = self.session.tool("library_search", query="dry vocal chop in D minor")["structuredContent"]
         self.assertEqual((result["available"], result["results"]), (False, []))

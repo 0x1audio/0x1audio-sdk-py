@@ -500,8 +500,39 @@ def go(c: dict) -> str:
 # --- the design system, for the MCP ui_components tool -------------------------------------------
 
 
+def _exports(ds: Path) -> dict[str, Path]:
+    """What @0x1audio/design-system exports, and the file each name comes from (src/index.ts)."""
+    import re
+
+    found: dict[str, Path] = {}
+    index = (ds / "src" / "index.ts").read_text()
+    for names, module in re.findall(r"export\s*\{([^}]*)\}\s*from\s*\"(\./[^\"]+)\"", index):
+        file = next((ds / "src" / (module[2:] + suffix) for suffix in (".tsx", ".ts") if (ds / "src" / (module[2:] + suffix)).is_file()), None)
+        if file is None:
+            continue
+        for name in names.split(","):
+            name = name.strip()
+            if name and not name.startswith("type "):
+                found[name.split(" as ")[-1].strip()] = file
+    return found
+
+
+def _helper(source: str, name: str) -> str:
+    """`waveformFrom(source: Blob | Uint8Array, bars = 120): Promise<Wave>` from an exported function."""
+    import re
+
+    found = re.search(rf"^export (?:async )?function {name}\(([^)]*)\)(?:\s*:\s*([^{{]+?))?\s*\{{", source, re.M)
+    if not found:
+        return ""
+    params = re.sub(r"\s+", " ", found.group(1)).strip()
+    result = (found.group(2) or "").strip()
+    return f"{name}({params})" + (f": {result}" if result else "")
+
+
 def _signature(source: str, name: str) -> str:
-    """The props a component takes, from `function Name({ a, b = 1, ...props }: Type)`."""
+    """The props a component takes, from `export function Name({ a, b = 1, ...props }: Type)`.
+    ``source`` is the file index.ts exports the name from: a private one of the same name elsewhere
+    (library-player.tsx has its own Waveform) is not the API."""
     import re
 
     found = re.search(rf"^(?:export )?function {name}\(", source, re.M)
@@ -526,6 +557,11 @@ def _signature(source: str, name: str) -> str:
         if part:
             names.append(part.split("=")[0].split(":")[0].strip())
     kind = re.sub(r"\s+", " ", params[j + 1 :].lstrip(":").strip())
+    if kind.startswith("{"):  # an inline type: show each prop with its type, ? for optional
+        raw = params[j + 1 :].lstrip(":").strip().strip("{}")
+        typed = [f"{m.group(1)}{m.group(2)}: {re.sub(r'\s+', ' ', m.group(3)).strip()}" for m in re.finditer(r"(\w+)(\??)\s*:\s*([^\n;]+)", raw)]
+        if typed and len(", ".join(typed)) <= 200:
+            return ", ".join(typed)
     shown = ", ".join(name for name in names if name)
     return shown + (f" ({kind})" if kind and "{" not in kind and len(kind) <= 70 else "")
 
@@ -540,7 +576,7 @@ def ui_index() -> dict | None:
         return None
     text = design.read_text()
     section = text.split("## Components", 1)[1].split("\n## ", 1)[0]
-    sources = "\n".join(path.read_text() for path in sorted((ds / "src" / "components").glob("*.tsx")))
+    exports = _exports(ds)
     skip = {"Sidebar*", "LibraryPlayer", "LibraryBrowser", "Tile", "SettingsGroup", "SettingsRow", "LibraryUploadButton"}
     components = []
     group = ""
@@ -555,15 +591,31 @@ def ui_index() -> dict | None:
         use = re.sub(r"\*\*|`", "", found.group(2)).strip()
         use = use.split(". ")[0].rstrip(".") + "."
         for name in names:
-            if name in skip:
+            if name in skip or name not in exports:
                 continue
-            components.append({"name": name, "group": group, "props": _signature(sources, name), "use": use[:160]})
+            components.append({"name": name, "group": group, "props": _signature(exports[name].read_text(), name), "use": use[:160]})
+    # Exported functions that go with the listed components (waveformFrom for Waveform), with their signatures.
+    files = {exports[item["name"]] for item in components}
+    helpers = []
+    for name, file in sorted(exports.items()):
+        if file in files and name[:1].islower():
+            signature = _helper(file.read_text(), name)
+            if signature:
+                helpers.append(signature)
+    # Exported interfaces the helpers and props name, like Wave.
+    types = {}
+    for file in sorted(files):
+        for name, body in re.findall(r"^export interface (\w+) \{([^}]*)\}", file.read_text(), re.M):
+            if "{" not in body and any(name in text for text in helpers + [item["props"] for item in components]):
+                types[name] = "{ " + "; ".join(line.strip().rstrip(";,") for line in body.strip().splitlines() if line.strip() and not line.strip().startswith("//")) + " }"
     theme = (ds / "src" / "theme.css").read_text()
     colours = sorted(set(re.findall(r"--color-([a-z-]+)\s*:", theme)))
     return {
         "import": 'import { Button, ... } from "@0x1audio/design-system"',
         "rules": "Only these components and tokens below the hero; no hex colours; one filled Button per view; design empty, working, done and error states; check light and dark.",
         "components": components,
+        "helpers": helpers,
+        "types": types,
         "tokens": {"colour": colours, "use_as": "bg-<token>, text-<token>, border-<token>"},
     }
 

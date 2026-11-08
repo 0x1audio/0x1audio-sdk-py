@@ -35,19 +35,19 @@
   {
    "name": "Combobox",
    "group": "Inputs",
-   "props": "items, value, onValueChange, placeholder, empty",
+   "props": "items: readonly ComboboxOption[], value: string, onValueChange: (value: string) => void, placeholder?: string, empty?: string",
    "use": "one field look: bg-field, a hairline border-input, shadow-xs, a stronger border on hover, the ink ring on focus."
   },
   {
    "name": "InputOTP",
    "group": "Inputs",
-   "props": "id, disabled, onValueChange",
+   "props": "id?: string, disabled?: boolean, onValueChange?: (value: string) => void",
    "use": "one field look: bg-field, a hairline border-input, shadow-xs, a stronger border on hover, the ink ring on focus."
   },
   {
    "name": "SearchField",
    "group": "Inputs",
-   "props": "value, onChange, label, placeholder, size, className",
+   "props": "value: string, onChange: (value: string) => void, label: string, placeholder?: string, size?: keyof typeof searchSizes, className?: string",
    "use": "search in a toolbar."
   },
   {
@@ -71,7 +71,7 @@
   {
    "name": "FolderField",
    "group": "Inputs",
-   "props": "value, onValueChange, onBrowse, placeholder, disabled, browseLabel, className",
+   "props": "value: string, onValueChange: (value: string) => void, onBrowse: () => void, placeholder?: string, disabled?: boolean, browseLabel?: string, className?: string",
    "use": "as named."
   },
   {
@@ -161,34 +161,41 @@
   {
    "name": "Waveform",
    "group": "Audio",
-   "props": "audio, peaks",
+   "props": "label: string, detail?: string, wave?: Wave | null, empty: string, className?: string",
    "use": "the Library outside the desktop (cloud web, app pages)."
   },
   {
    "name": "LibraryDialog",
    "group": "Audio",
-   "props": "open, onOpenChange, onPick, multiple, disabled",
+   "props": "open: boolean, onOpenChange: (open: boolean) => void, onPick: (paths: string[]) => void, multiple?: boolean, disabled?: boolean",
    "use": "the Library outside the desktop (cloud web, app pages)."
   },
   {
    "name": "Dropzone",
    "group": "Audio",
-   "props": "title, description, dragging, disabled, multiple, onChoose, extra, className",
+   "props": "title?: ReactNode, description?: ReactNode, dragging?: boolean, disabled?: boolean, multiple?: boolean, onChoose?: (paths: string[]) => void, extra?: ReactNode, className?: string",
    "use": "the Library outside the desktop (cloud web, app pages)."
   },
   {
    "name": "ActionForm",
    "group": "Audio",
-   "props": "action, host, openWith, className",
+   "props": "action: string | ActionSpec, host?: ActionHost, openWith?: string[], className?: string",
    "use": "generated app UIs."
   },
   {
    "name": "AppHero",
    "group": "Audio",
-   "props": "icon, wordmark, description, art, accent, className",
+   "props": "accent?: string, icon?: string, wordmark: ReactNode, description?: ReactNode, art?: ReactNode, className?: string",
    "use": "generated app UIs."
   }
  ],
+ "helpers": [
+  "clock(seconds: number)",
+  "waveformFrom(source: Blob | Uint8Array, bars = 120): Promise<Wave>"
+ ],
+ "types": {
+  "Wave": "{ peaks: number[]; seconds: number }"
+ },
  "tokens": {
   "colour": [
    "accent",
