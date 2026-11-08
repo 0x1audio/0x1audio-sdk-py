@@ -16,7 +16,7 @@ Worker -> host
     {"type": "cloud", "rid": 4, "method", "path", "body"}
 
 Host -> worker
-    {"type": "call", "id": 7, "action": "convert", "input": {...}}
+    {"type": "call", "id": 7, "action": "convert", "input": {...}, "handed"?: [path]}   handed: files from "Open with"
     {"type": "cancel", "id": 7}
     {"type": "library-result", "rid": 3, "status": 200, "body": {...}}
     {"type": "cloud-result", "rid": 4, "status": 200, "body": {...}}
@@ -78,7 +78,7 @@ class Link:
         with self._lock:
             self._pending.pop(rid, None)
         if answer.get("type") == "closed":
-            raise ConnectionError("0x1audio closed the app.")
+            raise ConnectionError("Mixel closed the app.")
         return answer
 
     def library(self, payload: dict) -> object:
@@ -103,7 +103,7 @@ class Link:
             try:
                 message = json.loads(line)
             except json.JSONDecodeError:
-                print("The app ignored a line from 0x1audio that was not JSON.", file=sys.stderr)
+                print("The app ignored a line from Mixel that was not JSON.", file=sys.stderr)
                 continue
             if not isinstance(message, dict):
                 continue
@@ -173,7 +173,7 @@ def serve(registered: Iterable[Action], *, stdin: BinaryIO | None = None, stdout
         cancels[ident] = threading.Event()
         thread = threading.Thread(
             target=contextvars.copy_context().run,
-            args=(_run, link, act, ident, message.get("input"), cancels),
+            args=(_run, link, act, ident, message.get("input"), cancels, message.get("handed")),
             name=f"ox1audio-{act.name}-{ident}",
             daemon=True,
         )
@@ -181,7 +181,7 @@ def serve(registered: Iterable[Action], *, stdin: BinaryIO | None = None, stdout
         workers = [item for item in workers if item.is_alive()] + [thread]
 
 
-def _run(link: Link, act: Action, ident: int, given: object, cancels: dict[int, threading.Event]) -> None:
+def _run(link: Link, act: Action, ident: int, given: object, cancels: dict[int, threading.Event], handed: object = None) -> None:
     cancel = cancels[ident]
 
     def report(fraction: float | None, label: str) -> None:
@@ -191,7 +191,7 @@ def _run(link: Link, act: Action, ident: int, given: object, cancels: dict[int, 
         link.send({"type": "event", "id": ident, "name": name, "body": body})
 
     try:
-        body = call(act, given, ident=ident, cancel=cancel, report=report, send=send)
+        body = call(act, given, ident=ident, cancel=cancel, report=report, send=send, handed=handed or ())
         line = {"type": "result", "id": ident, "body": body}
         if len(json.dumps(line, allow_nan=False)) > 1 << 20:
             line = _error(ident, "crashed", "The result is too large to send.", detail=f"{act.name}() returned more than 1 MiB. Write large data to a file and return its path.")

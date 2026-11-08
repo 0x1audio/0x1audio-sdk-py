@@ -19,7 +19,7 @@ Protocol 1 between the desktop and an app's Python worker: NDJSON on stdin and s
 
 | type | Fields | Notes |
 | --- | --- | --- |
-| `call` | `{id, action, input}` | Run an action. The host has already checked input against its schema. |
+| `call` | `{id, action, input, handed?: [path]}` | Run an action. The host has already checked input against its schema. handed lists the input files the person gave with Open with: the app may read them, not write next to them (ox.beside is None). |
 | `cancel` | `{id}` | Stop: the action's next ox.progress raises ox.Cancelled. |
 | `library-result` | `{rid, status, body}` | The answer to a library request. |
 | `cloud-result` | `{rid, status, body}` | The answer to a cloud request. |
@@ -27,7 +27,7 @@ Protocol 1 between the desktop and an app's Python worker: NDJSON on stdin and s
 
 ## Types
 
-- `ActionSpec` = `{name, title, input: JSON Schema object whose properties carry "x-ox": {control, accept?, multiple?, label?, placeholder?, step?}, timeout: seconds}`
+- `ActionSpec` = `{name, title, input: JSON Schema object whose properties carry "x-ox": {control, accept?, multiple?, label?, placeholder?, step?, unit?}, timeout: seconds}. A slider on an array of 2 numbers is a range: [start, end].`
 - `Error` = `{code, message, hint?, detail?, kept?: [Item]}`
 - `Item` = `{id, kind: sound | midi | other, title, path}`
 

@@ -1,4 +1,4 @@
-"""Build 0x1audio apps: typed Python actions that run on the person's computer.
+"""Build Mixel apps: typed Python actions that run on the person's computer.
 
     import ox1audio as ox
 
@@ -11,9 +11,9 @@ The whole public API is ``__all__`` below. AGENTS.md in every app explains it.
 
 __version__ = "0.3.0"
 
-from ox1audio.action import Cancelled, Problem, action, emit, progress, temp, test
+from ox1audio.action import Cancelled, Problem, action, beside, emit, progress, temp, test
 from ox1audio.app import run
-from ox1audio.fields import Choice, Files, Folder, Number, Slider, Text, Toggle, file, midi, sound
+from ox1audio.fields import Choice, Files, Folder, Number, Range, Slider, Text, Toggle, file, midi, sound
 
 from . import audio, data, library
 
@@ -24,11 +24,13 @@ __all__ = [
     "Folder",
     "Number",
     "Problem",
+    "Range",
     "Slider",
     "Text",
     "Toggle",
     "action",
     "audio",
+    "beside",
     "data",
     "emit",
     "file",
@@ -52,7 +54,7 @@ _removed = {
         "actions#progress-and-stop",
     ),
     "serve": (
-        "ox.serve is gone: 0x1audio finds your @ox.action functions and runs them.",
+        "ox.serve is gone: Mixel finds your @ox.action functions and runs them.",
         'decorate each handler with @ox.action("Title") and delete the serve({...}) call',
         "actions#an-action",
     ),
@@ -63,8 +65,8 @@ _removed = {
     ),
     "exercise": ("ox.exercise is now ox.test.", "ox.test(action, files=[...])", "actions#testing"),
     "convert": ("ox.convert is now ox.audio.convert.", 'ox.audio.convert(path, "wav")', "actions#helpers"),
-    "Client": ("The cloud client is not part of the app API.", "remove it; apps reach the cloud only through what 0x1audio allows", "permissions"),
-    "AuthenticatedClient": ("The cloud client is not part of the app API.", "remove it; apps reach the cloud only through what 0x1audio allows", "permissions"),
+    "Client": ("The cloud client is not part of the app API.", "remove it; apps reach the cloud only through what Mixel allows", "permissions"),
+    "AuthenticatedClient": ("The cloud client is not part of the app API.", "remove it; apps reach the cloud only through what Mixel allows", "permissions"),
 }
 
 

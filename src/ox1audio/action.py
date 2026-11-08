@@ -1,6 +1,6 @@
-"""An action is a typed Python function that 0x1audio runs for the person.
+"""An action is a typed Python function that Mixel runs for the person.
 
-The signature is the input. 0x1audio draws a form from it (or a page calls it
+The signature is the input. Mixel draws a form from it (or a page calls it
 with ``ox.run``), checks the values, and runs the function in the background
 with progress and a Stop button.
 """
@@ -23,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ox1audio.fields import Export, Field, Files, Folder, Number, Optional, Text, Toggle, _missing
+from ox1audio.fields import Export, Field, Files, Folder, Number, Optional, Range, Text, Toggle, _missing
 from ox1audio.runtime import made_var, sink_var
 
 DOCS = "https://docs.0x1audio.com"
@@ -126,7 +126,7 @@ def action(title: str, *, timeout: float | None = None) -> Callable[[Callable], 
                 "actions#progress-and-stop",
             ))
         if inspect.iscoroutinefunction(fn):
-            raise TypeError(_teach(f"{fn.__name__}() is async. Actions are plain functions; 0x1audio already runs them in the background.", f"def {fn.__name__}(...):", "actions#an-action"))
+            raise TypeError(_teach(f"{fn.__name__}() is async. Actions are plain functions; Mixel already runs them in the background.", f"def {fn.__name__}(...):", "actions#an-action"))
         name = fn.__name__
         existing = _registry.get(name)
         if existing is not None and existing.fn.__code__ is not fn.__code__:
@@ -217,7 +217,7 @@ def _control(fn_name: str, name: str, note: object) -> tuple[Field, type, bool]:
     if isinstance(note, type) and note in _plain:
         return _plain[note](), note, optional
     if note is inspect.Parameter.empty:
-        problem = f'{fn_name}(): the parameter "{name}" has no type, so 0x1audio can\'t draw a control for it.'
+        problem = f'{fn_name}(): the parameter "{name}" has no type, so Mixel can\'t draw a control for it.'
     else:
         shown = getattr(note, "__name__", None) or repr(note)
         problem = f'{fn_name}(): the parameter "{name}" is a {shown}, which is not a control.'
@@ -243,6 +243,8 @@ class _Running:
     last_sent: float = 0.0
     last_label: str = ""
     coalesce: bool = True
+    # Files handed over with "Open with": the app may read them, not write next to them.
+    handed: frozenset[str] = frozenset()
 
 
 _running: contextvars.ContextVar[_Running | None] = contextvars.ContextVar("ox_running", default=None)
@@ -363,6 +365,8 @@ def _coerce(control: Field, name: str, value: object, kind: type) -> object:
         if not isinstance(value, bool):
             raise BadInput(f"{label} is on or off (true or false).")
         return value
+    if isinstance(control, Range):
+        return _coerce_range(control, label, value)
     if isinstance(control, Number):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or value != value:
             raise BadInput(f"{label} must be a number{_bounds(control)}.")
@@ -391,6 +395,22 @@ def _coerce(control: Field, name: str, value: object, kind: type) -> object:
     return value
 
 
+def _coerce_range(control: Range, label: str, value: object) -> tuple:
+    within = f" from {control.min:g} to {control.max:g}"
+    if not isinstance(value, (list, tuple)) or len(value) != 2 or any(isinstance(item, bool) or not isinstance(item, (int, float)) or item != item for item in value):
+        raise BadInput(f"{label} is a start and an end{within}.")
+    low, high = value
+    if low < control.min or high > control.max:
+        raise BadInput(f"{label} must be{within}. It was {low:g} to {high:g}.")
+    if low > high:
+        raise BadInput(f"{label} starts after it ends: {low:g} to {high:g}.")
+    if control.integer:
+        if float(low) != int(low) or float(high) != int(high):
+            raise BadInput(f"{label} is whole numbers{within}.")
+        return (int(low), int(high))
+    return (float(low), float(high))
+
+
 def _bounds(control: Number) -> str:
     if control.min is not None and control.max is not None:
         return f" from {control.min:g} to {control.max:g}"
@@ -410,8 +430,11 @@ def call(
     report: Callable[[float | None, str], None] | None = None,
     send: Callable[[str, object], None] | None = None,
     coalesce: bool = True,
+    handed: object = (),
 ) -> object:
     """Run one action: bind the input, call the function, and turn what it returned into JSON.
+
+    ``handed`` lists the input files the person handed over with "Open with" (see ``beside``).
 
     On Stop, ``ox.Cancelled`` comes out with ``kept``: the files the action had already
     made (every ``ox.sound/midi/file`` whose file is there), added to the Library.
@@ -420,6 +443,8 @@ def call(
     state = _Running(id=ident, cancel=cancel or threading.Event(), report=report or (lambda fraction, label: None), coalesce=coalesce)
     if send is not None:
         state.send = send
+    if isinstance(handed, (list, tuple, set, frozenset)):
+        state.handed = frozenset(_key(item) for item in handed if isinstance(item, (str, Path)) and str(item))
     made: list[Export] = []
     made_token = made_var.set(made)
     token = _running.set(state)
@@ -441,6 +466,26 @@ def call(
     finally:
         _running.reset(token)
         made_var.reset(made_token)
+
+
+def beside(path: str | Path) -> Path | None:
+    """The folder next to ``path``, to save a copy there. ``None`` for a file the person handed
+    over from their Library with "Open with": the app may read it, not write next to it.
+
+    ``folder or ox.beside(path)`` is the usual "Save to": with ``None``, ox.audio.convert writes a
+    temporary copy, and returning it with ox.sound puts it in the Library.
+    """
+    current = _running.get()
+    if current is not None and current.handed and _key(path) in current.handed:
+        return None
+    return Path(path).parent
+
+
+def _key(path: str | Path) -> str:
+    try:
+        return str(Path(path).resolve())
+    except (OSError, RuntimeError):
+        return str(Path(path).absolute())
 
 
 def keep(made: list[Export]) -> list[dict]:
@@ -518,16 +563,24 @@ def _export(item: Export) -> dict:
     return record
 
 
-def test(fn: Callable | str, *, stop_at: float | None = None, **values: object) -> dict:
-    """Run an action here, without 0x1audio, the way the desktop would.
+def test(fn: Callable | str, *, stop_at: float | None = None, open_with: list | None = None, **values: object) -> dict:
+    """Run an action here, without Mixel, the way the desktop would.
 
     Returns ``{"result", "items", "progress", "events"}``: what the page would get, the
     Library items it would add (``id, kind, title, path, metadata``), every
     ``(fraction, label)`` it reported, and every ``(name, body)`` it emitted.
     ``stop_at=0.5`` presses Stop once progress reaches half way, so the action's next
     ``ox.progress`` raises ``ox.Cancelled``; its ``.kept`` lists what was kept.
+    ``open_with=[path]`` opens the action the way "Open with" does: the files go in its
+    first Files control, and ``ox.beside`` is ``None`` for them.
     """
     act = find(fn)
+    handed = [str(item) for item in (open_with or [])]
+    if handed:
+        first = next((param for param in act.params if isinstance(param.field, Files)), None)
+        if first is None:
+            raise TypeError(_teach(f"ox.test(open_with=...): {act.name} has no Files control to open them in.", f"add files: ox.Files(\"audio\") to {act.name}()", "actions#testing"))
+        values.setdefault(first.name, handed if first.field.multiple else handed[0])
     if not os.environ.get("OX1_DATA", "").strip():
         from ox1audio import data
 
@@ -549,7 +602,7 @@ def test(fn: Callable | str, *, stop_at: float | None = None, **values: object) 
 
     token = sink_var.set(sink)
     try:
-        result = call(act, _plainify(values), cancel=stop, report=report, send=lambda name, body: events.append((name, body)), coalesce=False)
+        result = call(act, _plainify(values), cancel=stop, report=report, send=lambda name, body: events.append((name, body)), coalesce=False, handed=handed)
     finally:
         sink_var.reset(token)
     return {"result": result, "items": items, "progress": reported, "events": events}
@@ -571,7 +624,7 @@ _temps: list[Path] = []
 
 def temp() -> Path:
     """A new, empty folder for files the action makes. It is removed when the app closes,
-    after 0x1audio has copied returned sounds into the Library."""
+    after Mixel has copied returned sounds into the Library."""
     folder = Path(tempfile.mkdtemp(prefix="ox1-"))
     _temps.append(folder)
     return folder

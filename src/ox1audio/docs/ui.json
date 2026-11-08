@@ -65,7 +65,7 @@
   {
    "name": "Slider",
    "group": "Inputs",
-   "props": "className, ...props (SliderPrimitive.Root.Props<number>)",
+   "props": "className, thumbLabels, ...props",
    "use": "as named."
   },
   {

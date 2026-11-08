@@ -22,6 +22,8 @@ export interface ControlHint {
   label?: string
   placeholder?: string
   step?: number
+  // Shown after the value, like "dB", "Hz" or "%".
+  unit?: string
 }
 
 export interface PropertySchema {
@@ -34,7 +36,9 @@ export interface PropertySchema {
   minLength?: number
   maxLength?: number
   minItems?: number
-  items?: { type: "string"; enum?: string[] }
+  maxItems?: number
+  // Files and choices are strings; a range (control "slider", 2 items) is numbers.
+  items?: { type: "string" | "number" | "integer"; enum?: string[]; minimum?: number; maximum?: number }
   uniqueItems?: boolean
   anyOf?: PropertySchema[]
   "x-ox"?: ControlHint

@@ -1,8 +1,9 @@
 """Controls an action declares, and the files an action hands back.
 
-A control is a parameter annotation. 0x1audio draws it, checks the value, and
+A control is a parameter annotation. Mixel draws it, checks the value, and
 passes the action a plain Python value: Files become ``list[Path]``, a Folder
-becomes a ``Path``, the rest are ``str``, ``int``, ``float`` or ``bool``.
+becomes a ``Path``, a Range a ``(low, high)`` tuple, the rest are ``str``, ``int``,
+``float`` or ``bool``.
 """
 
 from __future__ import annotations
@@ -129,16 +130,20 @@ class Text(Field):
 
 
 class Number(Field):
-    """A number typed in a box. Whole numbers come back as ``int`` unless a bound or the step is a fraction."""
+    """A number typed in a box. Whole numbers come back as ``int`` unless a bound or the step is a fraction.
+
+    ``unit`` is shown after the value, like ``"dB"``, ``"Hz"`` or ``"%"``.
+    """
 
     control = "number"
 
-    def __init__(self, min: float | None = None, max: float | None = None, step: float | None = None, label: str | None = None) -> None:
+    def __init__(self, min: float | None = None, max: float | None = None, step: float | None = None, label: str | None = None, *, unit: str | None = None) -> None:
         super().__init__(label)
         _check_range(f"ox.{type(self).__name__}", min, max, step)
         self.min = min
         self.max = max
         self.step = step
+        self.unit = _check_unit(f"ox.{type(self).__name__}", unit)
         self.whole: bool | None = None
 
     @property
@@ -155,20 +160,54 @@ class Number(Field):
             spec["minimum"] = self.min
         if self.max is not None:
             spec["maximum"] = self.max
-        spec["x-ox"] = self._ox(step=self.step)
+        spec["x-ox"] = self._ox(step=self.step, unit=self.unit)
         return spec
 
 
 class Slider(Number):
-    """A number on a slider. Starts at ``min`` unless the parameter has a default."""
+    """A number on a slider. Starts at ``min`` unless the parameter has a default.
+
+    Whole numbers (an ``int``) when min, max and step are all ints: ``ox.Slider(1, 8, step=1)``.
+    """
 
     control = "slider"
 
-    def __init__(self, min: float = 0, max: float = 1, step: float = 0.01, label: str | None = None) -> None:
-        super().__init__(min, max, step, label)
+    def __init__(self, min: float = 0, max: float = 1, step: float = 0.01, label: str | None = None, *, unit: str | None = None) -> None:
+        super().__init__(min, max, step, label, unit=unit)
 
     def natural_default(self) -> object:
         return self.min
+
+
+class Range(Field):
+    """A start and an end on one slider, like a band of frequencies or a part of a song.
+
+    The action gets a ``(low, high)`` tuple, ints when min, max and step are all ints.
+    It starts at the whole range unless the parameter has a default, like ``= (200, 4000)``.
+    """
+
+    control = "slider"
+
+    def __init__(self, min: float = 0, max: float = 1, step: float = 0.01, label: str | None = None, *, unit: str | None = None) -> None:
+        super().__init__(label)
+        _check_range("ox.Range", min, max, step)
+        if min is None or max is None:
+            raise TypeError("ox.Range(): min and max are numbers.\nfix:  write it like ox.Range(20, 20000, step=1, unit=\"Hz\").\ndocs: https://docs.0x1audio.com/actions#controls")
+        self.min = min
+        self.max = max
+        self.step = step
+        self.unit = _check_unit("ox.Range", unit)
+
+    @property
+    def integer(self) -> bool:
+        return all(isinstance(value, int) for value in (self.min, self.max, self.step))
+
+    def schema(self) -> dict:
+        items = {"type": "integer" if self.integer else "number", "minimum": self.min, "maximum": self.max}
+        return {"type": "array", "items": items, "minItems": 2, "maxItems": 2, "x-ox": self._ox(step=self.step, unit=self.unit)}
+
+    def natural_default(self) -> object:
+        return (self.min, self.max)
 
 
 class Toggle(Field):
@@ -199,6 +238,14 @@ def _check_range(name: str, low: float | None, high: float | None, step: float |
         raise ValueError(f"{name}({low}, {high}): min is larger than max.\nfix:  swap them.\ndocs: https://docs.0x1audio.com/actions#controls")
     if step is not None and step <= 0:
         raise ValueError(f"{name}(step={step}): the step is above zero.\nfix:  use a step like 1 or 0.5.\ndocs: https://docs.0x1audio.com/actions#controls")
+
+
+def _check_unit(name: str, unit: object) -> str | None:
+    if unit is None:
+        return None
+    if not isinstance(unit, str) or not unit.strip() or len(unit) > 12 or "\n" in unit:
+        raise TypeError(f"{name}(unit={unit!r}): the unit is a short word shown after the value.\nfix:  write it like unit=\"dB\", \"Hz\", \"%\" or \"s\".\ndocs: https://docs.0x1audio.com/actions#controls")
+    return unit.strip()
 
 
 class Export:
