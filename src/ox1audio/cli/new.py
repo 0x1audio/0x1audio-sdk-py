@@ -90,6 +90,8 @@ export default defineConfig({{
     tailwindcss(),
     {{ name: "file-protocol", transformIndexHtml: (html) => html.replaceAll(" crossorigin", "") }},
   ],
+  // The design system may be linked from a checkout: one React for both.
+  resolve: {{ dedupe: ["react", "react-dom"] }},
   base: "./",
   // One local bundle, read from disk: its size is fine.
   build: {{ outDir: "dist", emptyOutDir: true, chunkSizeWarningLimit: 2000 }},

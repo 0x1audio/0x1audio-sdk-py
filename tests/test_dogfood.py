@@ -104,6 +104,7 @@ class PageScaffoldTest(unittest.TestCase):
             self.assertEqual(package["license"], "Apache-2.0")
             self.assertEqual(set(package["dependencies"]) >= {"@0x1audio/sdk", "@0x1audio/design-system", "react"}, True)
             self.assertIn('base: "./"', (app / "vite.config.ts").read_text())
+            self.assertIn('dedupe: ["react", "react-dom"]', (app / "vite.config.ts").read_text())
             self.assertIn('<ActionForm action="convert" />', (app / "src" / "App.tsx").read_text())
             report = json.loads(mixel("check", "--json", cwd=app).stdout)
             self.assertEqual([(item["code"], item["fix"]) for item in report["errors"]], [("manifest_page", "build the page (npm run build)")])
