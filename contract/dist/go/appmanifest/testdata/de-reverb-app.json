@@ -1,0 +1,22 @@
+{
+  "$schema": "https://0x1audio.com/schema/app/v1.json",
+  "name": "de-reverb",
+  "displayName": "SonicDryer",
+  "summary": "Take the reverb and echo out of a recording.",
+  "version": "0.2.0",
+  "sdk": "^0.3",
+  "entry": "dereverb.py",
+  "page": "dist/index.html",
+  "permissions": {
+    "files": "Open the recording you choose and save the dry copy next to it.",
+    "library": "Add the dry copy to your Library.",
+    "network": {
+      "why": "Download the reverb model the first time you use it.",
+      "hosts": ["github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com", "raw.githubusercontent.com"]
+    }
+  },
+  "accent": "#d4602f",
+  "icon": "icon.svg",
+  "window": { "width": 1280, "height": 720, "minWidth": 960, "minHeight": 540 },
+  "tags": ["clean-up"]
+}

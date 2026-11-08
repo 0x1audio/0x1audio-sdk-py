@@ -1,0 +1,13 @@
+{
+  "$schema": "https://0x1audio.com/schema/app/v1.json",
+  "name": "hello-world",
+  "displayName": "Hello",
+  "summary": "The smallest real app: convert songs to another format.",
+  "version": "0.2.0",
+  "sdk": "^0.3",
+  "entry": "app.py",
+  "permissions": {
+    "files": "Open the songs you choose.",
+    "library": "Save the converted copies to your Library."
+  }
+}

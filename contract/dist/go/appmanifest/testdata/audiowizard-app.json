@@ -1,0 +1,19 @@
+{
+  "$schema": "https://0x1audio.com/schema/app/v1.json",
+  "name": "audiowizard",
+  "displayName": "audioWizard",
+  "summary": "Change pitch, formant and tempo, each on its own.",
+  "version": "0.2.0",
+  "sdk": "^0.3",
+  "entry": "audiowizard.py",
+  "page": "dist/index.html",
+  "permissions": {
+    "files": "Open the audio you choose and save the changed copies next to it.",
+    "data": "Keep the decoded audio on this computer while you work.",
+    "library": "Add the changed copies to your Library."
+  },
+  "accent": "#7c4dff",
+  "icon": "icon.svg",
+  "window": { "width": 820, "height": 900, "minWidth": 560, "minHeight": 480 },
+  "tags": ["pitch", "tempo"]
+}

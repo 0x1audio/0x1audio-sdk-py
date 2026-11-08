@@ -21,6 +21,7 @@ Every generated file is also checked for install lines that would run a stranger
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -253,6 +254,248 @@ def llms(c: dict) -> str:
     return (HERE / "llms.txt").read_text().replace("{{docs}}", DOCS)
 
 
+# --- Go, for the registry (GAB-56) -------------------------------------------------------------
+
+GO_TEMPLATE = """// Code generated from sdk-py/contract by contract/generate.py. DO NOT EDIT.
+
+// Package appmanifest checks app.json v1 with the same rules as mixel check and the desktop.
+// It covers what can be checked from app.json alone; file checks (entry exists, icon is
+// square) and code checks (permissions used) stay with mixel check, which the registry runs.
+package appmanifest
+
+import (
+\t"encoding/json"
+\t"fmt"
+\t"net"
+\t"regexp"
+\t"strings"
+)
+
+const Schema = %(schema)s
+const DocsURL = "https://docs.0x1audio.com/errors#"
+
+var Fields = %(fields)s
+var PermissionCodes = %(codes)s
+
+var (
+\tnamePattern    = regexp.MustCompile(%(name)s)
+\tversionPattern = regexp.MustCompile(%(version)s)
+\tsdkPattern     = regexp.MustCompile(%(sdk)s)
+\taccentPattern  = regexp.MustCompile(%(accent)s)
+\thostPattern    = regexp.MustCompile(%(host)s)
+)
+
+const (
+\tnameMin, nameMax     = %(name_min)d, %(name_max)d
+\tdisplayNameMax       = %(display)d
+\tsummaryMax           = %(summary)d
+\treasonMin, reasonMax = %(reason_min)d, %(reason_max)d
+\thostsMax             = %(hosts_max)d
+\thostMax              = %(host_len)d
+\ttagsMax              = %(tags_max)d
+)
+
+var windowBounds = map[string][2]int{%(window)s}
+
+// fixes is each code's usual fix, from contract/errors.json.
+var fixes = map[string]string{%(fixes)s}
+
+// Problem is one refusal, in the registry's error shape: {code, message, param, doc_url, fix}.
+type Problem struct {
+\tCode    string `json:"code"`
+\tMessage string `json:"message"`
+\tParam   string `json:"param,omitempty"`
+\tFix     string `json:"fix,omitempty"`
+\tDocURL  string `json:"doc_url"`
+}
+
+func problem(code, param, message string) Problem {
+\treturn Problem{Code: code, Message: message, Param: param, Fix: fixes[code], DocURL: DocsURL + code}
+}
+
+// Validate returns every problem with an app.json, or nil when it is a valid v1 manifest.
+func Validate(raw []byte) []Problem {
+\tvar data map[string]any
+\tif err := json.Unmarshal(raw, &data); err != nil || data == nil {
+\t\treturn []Problem{problem("manifest_json", "", "app.json is not a JSON object.")}
+\t}
+\tvar found []Problem
+\tadd := func(code, param, message string) { found = append(found, problem(code, param, message)) }
+\tschema, ok := data["$schema"]
+\tif !ok {
+\t\treturn []Problem{problem("manifest_v0", "$schema", "app.json has no \\"$schema\\": it is the old v0 format.")}
+\t}
+\tif schema != Schema {
+\t\tadd("manifest_schema", "$schema", fmt.Sprintf("$schema is %%v, which isn't the v1 URL.", schema))
+\t}
+\tknown := map[string]bool{}
+\tfor _, field := range Fields {
+\t\tknown[field] = true
+\t}
+\tfor key := range data {
+\t\tif !known[key] {
+\t\t\tadd("manifest_field", key, key+" is not a field.")
+\t\t}
+\t}
+\tif name, ok := data["name"].(string); !ok || len(name) < nameMin || len(name) > nameMax || !namePattern.MatchString(name) {
+\t\tadd("manifest_name", "name", fmt.Sprintf("name is %%d to %%d lowercase letters, digits and dashes.", nameMin, nameMax))
+\t}
+\tif display, ok := data["displayName"].(string); !ok || strings.TrimSpace(display) == "" || len([]rune(display)) > displayNameMax {
+\t\tadd("manifest_display_name", "displayName", fmt.Sprintf("displayName is the name people see, up to %%d characters.", displayNameMax))
+\t}
+\tif value, present := data["summary"]; present {
+\t\tif summary, ok := value.(string); !ok || strings.TrimSpace(summary) == "" || len([]rune(summary)) > summaryMax {
+\t\t\tadd("manifest_summary", "summary", fmt.Sprintf("summary is one sentence, up to %%d characters.", summaryMax))
+\t\t}
+\t}
+\tif version, ok := data["version"].(string); !ok || !versionPattern.MatchString(version) {
+\t\tadd("manifest_version", "version", "version is MAJOR.MINOR.PATCH.")
+\t}
+\tif value, present := data["sdk"]; !present {
+\t\tadd("sdk_missing", "sdk", "sdk is required: it says which Mixel can run this app.")
+\t} else if sdk, ok := value.(string); !ok || !sdkPattern.MatchString(sdk) {
+\t\tadd("sdk_range", "sdk", "sdk is a caret range like ^0.3.")
+\t}
+\t_, hasEntry := data["entry"]
+\t_, hasPage := data["page"]
+\tif !hasEntry && !hasPage {
+\t\tadd("manifest_entry", "entry", "The app needs an entry (its Python file) or a page.")
+\t}
+\tif hasEntry && !relativeFile(data["entry"], ".py") {
+\t\tadd("manifest_entry", "entry", "entry is a .py file inside the app.")
+\t}
+\tif hasPage && !relativeFile(data["page"], ".html") {
+\t\tadd("manifest_page", "page", "page is an .html file inside the app.")
+\t}
+\tif value, present := data["permissions"]; present {
+\t\tpermissions, ok := value.(map[string]any)
+\t\tif !ok {
+\t\t\tadd("permission_reason", "permissions", "permissions is an object of code to reason.")
+\t\t}
+\t\tfor code, reason := range permissions {
+\t\t\tparam := "permissions." + code
+\t\t\tif !contains(PermissionCodes, code) {
+\t\t\t\tadd("permission_unknown", param, code+" is not a permission.")
+\t\t\t\tcontinue
+\t\t\t}
+\t\t\tif code == "network" {
+\t\t\t\tnetwork, ok := reason.(map[string]any)
+\t\t\t\tif !ok {
+\t\t\t\t\tadd("network_hosts", param, "network says why, and which hosts.")
+\t\t\t\t\tcontinue
+\t\t\t\t}
+\t\t\t\thosts, _ := network["hosts"].([]any)
+\t\t\t\tif len(hosts) == 0 || len(hosts) > hostsMax || !allHosts(hosts) {
+\t\t\t\t\tadd("network_hosts", param+".hosts", "hosts lists the domains the app reaches. The whole web, IPs and localhost are refused.")
+\t\t\t\t}
+\t\t\t\treason, param = network["why"], param+".why"
+\t\t\t}
+\t\t\ttext, ok := reason.(string)
+\t\t\tif !ok || len([]rune(strings.TrimSpace(text))) < reasonMin || len([]rune(text)) > reasonMax {
+\t\t\t\tadd("permission_reason", param, fmt.Sprintf("Each permission has a reason the person reads: one sentence, %%d to %%d characters.", reasonMin, reasonMax))
+\t\t\t}
+\t\t}
+\t}
+\tif value, present := data["accent"]; present {
+\t\tif accent, ok := value.(string); !ok || !accentPattern.MatchString(accent) {
+\t\t\tadd("manifest_accent", "accent", "accent is a colour like #5b8cff.")
+\t\t}
+\t}
+\tif value, present := data["icon"]; present {
+\t\ticon, ok := value.(string)
+\t\tlower := strings.ToLower(icon)
+\t\tif !ok || !(strings.HasSuffix(lower, ".svg") || strings.HasSuffix(lower, ".png")) || !relativeFile(icon, "") {
+\t\t\tadd("manifest_icon", "icon", "icon is a square .svg or .png inside the app.")
+\t\t}
+\t}
+\tif value, present := data["window"]; present {
+\t\twindow, ok := value.(map[string]any)
+\t\tif !ok || len(window) == 0 {
+\t\t\tadd("manifest_window", "window", "window is an object of sizes in pixels.")
+\t\t}
+\t\tfor key, size := range window {
+\t\t\tbounds, known := windowBounds[key]
+\t\t\tnumber, isNumber := size.(float64)
+\t\t\tif !known || !isNumber || number != float64(int(number)) || int(number) < bounds[0] || int(number) > bounds[1] {
+\t\t\t\tadd("manifest_window", "window."+key, "window sizes are whole pixels within the allowed range.")
+\t\t\t}
+\t\t}
+\t}
+\tif value, present := data["tags"]; present {
+\t\ttags, ok := value.([]any)
+\t\tif !ok || len(tags) > tagsMax || !allWords(tags) {
+\t\t\tadd("manifest_tags", "tags", fmt.Sprintf("tags is up to %%d single words.", tagsMax))
+\t\t}
+\t}
+\treturn found
+}
+
+func relativeFile(value any, suffix string) bool {
+\tpath, ok := value.(string)
+\tif !ok || path == "" || len(path) > 200 || strings.HasPrefix(path, "/") || strings.Contains(path, "\\\\") || !strings.HasSuffix(path, suffix) {
+\t\treturn false
+\t}
+\tfor _, part := range strings.Split(path, "/") {
+\t\tif part == ".." {
+\t\t\treturn false
+\t\t}
+\t}
+\treturn true
+}
+
+func allHosts(hosts []any) bool {
+\tfor _, value := range hosts {
+\t\thost, ok := value.(string)
+\t\tif !ok || len(host) > hostMax || host == "localhost" || net.ParseIP(host) != nil || !hostPattern.MatchString(host) {
+\t\t\treturn false
+\t\t}
+\t}
+\treturn true
+}
+
+func allWords(tags []any) bool {
+\tfor _, value := range tags {
+\t\ttag, ok := value.(string)
+\t\tif !ok || tag == "" || len(tag) > 64 || strings.ContainsAny(tag, " \\t\\n") {
+\t\t\treturn false
+\t\t}
+\t}
+\treturn true
+}
+
+func contains(list []string, value string) bool {
+\tfor _, item := range list {
+\t\tif item == value {
+\t\t\treturn true
+\t\t}
+\t}
+\treturn false
+}
+"""
+
+
+def go(c: dict) -> str:
+    r = rules(c)
+    host = r["HOST_PATTERN"]
+    host_len = 253
+    lookahead = re.match(r"\^\(\?=\.\{1,(\d+)\}\$\)", host)
+    if lookahead:  # RE2 has no lookahead: check the length in code instead
+        host_len = int(lookahead.group(1))
+        host = "^" + host[lookahead.end():]
+    quote = lambda text: "`" + text + "`"  # noqa: E731
+    strings = lambda items: "[]string{" + ", ".join(json.dumps(item) for item in items) + "}"  # noqa: E731
+    fixes = ", ".join(f"{json.dumps(code)}: {json.dumps(info['fix'], ensure_ascii=False)}" for code, info in r["ERRORS"].items() if info["area"] == "check")
+    return GO_TEMPLATE % {
+        "schema": json.dumps(r["SCHEMA"]), "fields": strings(r["FIELDS"]), "codes": strings(r["PERMISSIONS"]),
+        "name": quote(r["NAME_PATTERN"]), "version": quote(r["VERSION_PATTERN"]), "sdk": quote(r["SDK_PATTERN"]),
+        "accent": quote(r["ACCENT_PATTERN"]), "host": quote(host),
+        "name_min": r["NAME_LENGTH"][0], "name_max": r["NAME_LENGTH"][1], "display": r["DISPLAY_NAME_MAX"], "summary": r["SUMMARY_MAX"],
+        "reason_min": r["REASON_LENGTH"][0], "reason_max": r["REASON_LENGTH"][1], "hosts_max": r["HOSTS_MAX"], "host_len": host_len,
+        "tags_max": r["TAGS_MAX"], "window": ", ".join(f"{json.dumps(k)}: {{{v[0]}, {v[1]}}}" for k, v in r["WINDOW"].items()),
+        "fixes": fixes,
+    }
+
+
 # --- the design system, for the MCP ui_components tool -------------------------------------------
 
 
@@ -346,6 +589,9 @@ def outputs() -> dict[Path, str]:
     editor = PROJECTS / "0x1audio-cloud" / "apps" / "desktop" / "schema" / "app.schema.json"
     if editor.parent.is_dir():
         found[editor] = json.dumps(c["schema"], indent=2, ensure_ascii=False) + "\n"
+    found[HERE / "dist" / "go" / "appmanifest" / "manifest.gen.go"] = go(c)
+    # For packages/design-system/src/contract.gen.ts (the Design pod copies it in; see GAB-37).
+    found[HERE / "dist" / "design-system" / "contract.gen.ts"] = typescript(c, "Design system copy: ActionForm's types.")
     index = ui_index()
     if index is not None:
         found[pkg / "docs" / "ui.json"] = json.dumps(index, indent=1, ensure_ascii=False) + "\n"

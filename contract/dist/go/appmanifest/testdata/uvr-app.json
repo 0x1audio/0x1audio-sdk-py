@@ -1,0 +1,22 @@
+{
+  "$schema": "https://0x1audio.com/schema/app/v1.json",
+  "name": "ultimate-vocal-remover",
+  "displayName": "Vocal Extractor",
+  "summary": "Pull the vocals out of a song, and keep the music too.",
+  "version": "0.4.0",
+  "sdk": "^0.3",
+  "entry": "uvr.py",
+  "page": "dist/index.html",
+  "permissions": {
+    "files": "Open the song you choose and save the vocals and music next to it.",
+    "library": "Add the vocals and the music to your Library.",
+    "network": {
+      "why": "Download the separation model the first time you use it.",
+      "hosts": ["github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com", "raw.githubusercontent.com", "dl.fbaipublicfiles.com"]
+    }
+  },
+  "accent": "#e0368f",
+  "icon": "icon.svg",
+  "window": { "width": 1280, "height": 720, "minWidth": 960, "minHeight": 540 },
+  "tags": ["separate"]
+}
