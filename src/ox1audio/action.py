@@ -334,6 +334,14 @@ def _coerce(control: Field, name: str, value: object, kind: type) -> object:
         return float(value)
     choices = getattr(control, "options", None)
     if choices is not None:
+        if getattr(control, "multiple", False):
+            picked = value if isinstance(value, (list, tuple)) else [value]
+            if not picked:
+                raise BadInput(f"Choose at least one option for {label.lower()}.")
+            for item in picked:
+                if item not in choices:
+                    raise BadInput(f"{label} can include {', '.join(choices)}. It had {item}.")
+            return [option for option in choices if option in picked]
         if value not in choices:
             raise BadInput(f"{label} is one of {', '.join(choices)}.")
         return value

@@ -80,10 +80,12 @@ def encoders() -> frozenset[str]:
     return frozenset(found)
 
 
-def probe(path: str) -> Info:
+def probe(path: str | Path) -> Info:
     source = Path(path)
     if not source.is_file():
-        raise ValueError(f"{source.name} is not there anymore.")
+        from ox1audio.action import Problem
+
+        raise Problem(f"{source.name} is not there anymore.", hint="Choose it again.")
     result = subprocess.run(
         [ffmpeg(), "-hide_banner", "-nostdin", "-i", str(source)],
         capture_output=True,
@@ -93,7 +95,9 @@ def probe(path: str) -> Info:
     )
     stream = _stream.search(result.stderr)
     if not stream:
-        raise ValueError(f"{source.name} has no audio ffmpeg can read.")
+        from ox1audio.action import Problem
+
+        raise Problem(f"{source.name} isn't a sound file 0x1audio can open.", hint="Choose a WAV, AIFF, FLAC, MP3 or similar file.")
     duration = 0.0
     found = _duration.search(result.stderr)
     if found:
@@ -139,7 +143,7 @@ class _Plan:
     args: list[str] = field(default_factory=list)
 
 
-def convert(path: str, format_id: str, folder: str | None = None, on_progress: Callable[[float], None] | None = None) -> Path:
+def convert(path: str | Path, format_id: str, folder: str | Path | None = None, on_progress: Callable[[float], None] | None = None) -> Path:
     """Write ``path`` as ``format_id`` and return the new file."""
     source = probe(path)
     fmt = find(format_id)
@@ -172,13 +176,21 @@ def _run(step: _Plan, on_progress: Callable[[float], None] | None) -> Path:
     with subprocess.Popen(step.args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="replace") as process:
         reader = threading.Thread(target=lambda: errors.extend(process.stderr or []), daemon=True)
         reader.start()
-        for line in process.stdout or []:
-            key, _, value = line.strip().partition("=")
-            if key == "out_time_us" and total > 0 and on_progress:
-                try:
-                    on_progress(min(1.0, max(0.0, int(value) / 1_000_000 / total)))
-                except ValueError:
-                    pass
+        try:
+            for line in process.stdout or []:
+                key, _, value = line.strip().partition("=")
+                if key == "out_time_us" and total > 0 and on_progress:
+                    try:
+                        fraction = min(1.0, max(0.0, int(value) / 1_000_000 / total))
+                    except ValueError:
+                        continue
+                    on_progress(fraction)
+        except BaseException:
+            # Stop (ox.Cancelled from the progress callback) or any error: don't leave ffmpeg or half a file.
+            process.kill()
+            process.wait()
+            step.target.unlink(missing_ok=True)
+            raise
         process.wait()
         reader.join(timeout=5)
     if process.returncode != 0:

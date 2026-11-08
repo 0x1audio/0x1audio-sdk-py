@@ -146,3 +146,29 @@ class ActionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ChoiceAndAudioTest(unittest.TestCase):
+    def setUp(self):
+        clear()
+
+    def test_a_multiple_choice_is_a_list_in_option_order(self):
+        @ox.action("Convert")
+        def convert(formats: ox.Choice("wav", "flac", "mp3", multiple=True)):
+            return formats
+
+        spec = find(convert).spec()["input"]["properties"]["formats"]
+        self.assertEqual(spec["default"], ["wav"])
+        self.assertEqual(spec["x-ox"], {"control": "choice", "multiple": True})
+        self.assertEqual(ox.test(convert, formats=["mp3", "wav"])["result"], ["wav", "mp3"])
+        with self.assertRaisesRegex(BadInput, "Choose at least one option for formats"):
+            bind(find(convert), {"formats": []})
+
+    def test_a_file_that_is_not_audio_is_a_problem_in_plain_words(self):
+        with tempfile.TemporaryDirectory() as folder:
+            notes = Path(folder) / "notes.wav"
+            notes.write_text("not audio")
+            with self.assertRaises(ox.Problem) as caught:
+                ox.audio.probe(notes)
+        self.assertEqual(str(caught.exception), "notes.wav isn't a sound file 0x1audio can open.")
+        self.assertNotIn("ffmpeg", str(caught.exception) + caught.exception.hint)

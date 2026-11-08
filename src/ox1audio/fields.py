@@ -83,11 +83,14 @@ class Folder(Field):
 
 
 class Choice(Field):
-    """One of a few options, as a ``str``. The first option is the default unless the parameter has one."""
+    """One of a few options, as a ``str``; with ``multiple=True``, some of them, as a ``list[str]``.
+
+    The first option is the default unless the parameter has one.
+    """
 
     control = "choice"
 
-    def __init__(self, *options: str, label: str | None = None) -> None:
+    def __init__(self, *options: str, multiple: bool = False, label: str | None = None) -> None:
         super().__init__(label)
         if not options:
             raise ValueError(
@@ -96,12 +99,15 @@ class Choice(Field):
                 "docs: https://docs.0x1audio.com/actions#controls"
             )
         self.options = [str(option) for option in options]
+        self.multiple = bool(multiple)
 
     def schema(self) -> dict:
+        if self.multiple:
+            return {"type": "array", "items": {"type": "string", "enum": list(self.options)}, "minItems": 1, "uniqueItems": True, "x-ox": self._ox(multiple=True)}
         return {"type": "string", "enum": list(self.options), "x-ox": self._ox()}
 
     def natural_default(self) -> object:
-        return self.options[0]
+        return [self.options[0]] if self.multiple else self.options[0]
 
 
 class Text(Field):
