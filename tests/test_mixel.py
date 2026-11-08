@@ -289,9 +289,12 @@ class RegistryTest(Scratch):
 
     def test_publish_needs_a_clean_pushed_tree_and_sign_in(self):
         app = self.git_app()
-        dry = mixel("publish", "--dry-run", cwd=app, env=self.env)
+        dry = mixel("publish", "--dry-run", cwd=app, env={**self.env, "MIXEL_TOKEN": "tok-123"})
         self.assertEqual(dry.returncode, 0, dry.stdout + dry.stderr)
         self.assertIn("pushed to github.com/ada/make-it-louder", dry.stdout)
+        unsigned = mixel("publish", "--dry-run", cwd=app, env=self.env)
+        self.assertEqual(unsigned.returncode, 1)
+        self.assertIn("Sign-in    no  not signed in\n           fix:  mixel login", unsigned.stdout)
         signed_out = mixel("publish", cwd=app, env=self.env)
         self.assertEqual(signed_out.returncode, 3)
         self.assertIn("You're not signed in.\nfix:  mixel login", signed_out.stderr)
@@ -303,7 +306,19 @@ class RegistryTest(Scratch):
         (app / "app.py").write_text((app / "app.py").read_text() + "\n")
         dirty = mixel("publish", "--dry-run", cwd=app, env=self.env)
         self.assertEqual(dirty.returncode, 1)
-        self.assertIn("There are changes that aren't committed (app.py)", dirty.stderr)
+        self.assertIn("There are changes that aren't committed (app.py)", dirty.stdout)
+        self.assertIn("not signed in", dirty.stdout, "every gate is listed, not just the first")
+
+    def test_dry_run_lists_every_gate_with_plain_git_words(self):
+        app = self.new_app()
+        subprocess.run(["rm", "-rf", str(app / ".git")], check=True)
+        (app / "app.py").write_text("import subprocess\n" + (app / "app.py").read_text())
+        done = mixel("publish", "--dry-run", "--json", cwd=app, env=self.env)
+        self.assertEqual(done.returncode, 1)
+        gates = {gate["gate"]: gate for gate in json.loads(done.stdout)["gates"]}
+        self.assertEqual([gates[name]["ok"] for name in ("check", "git", "sign-in")], [False, False, False])
+        self.assertEqual(gates["git"]["detail"], "This folder isn't a git repository yet. Reviewers read the app on GitHub.")
+        self.assertNotIn("fatal", done.stdout)
 
     def test_an_unreachable_registry_exits_4_with_the_fix(self):
         app = self.new_app()

@@ -166,6 +166,14 @@ def repository(url: str) -> str | None:
 
 def where(folder: Path) -> dict:
     """What would be submitted: the GitHub repository and the pushed commit. Refuses anything else."""
+    try:
+        inside = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=folder, capture_output=True, text=True, timeout=30)
+    except FileNotFoundError:
+        raise Stop("git isn't installed.", fix="install git, then commit and push the app", code=FAILED, error="git_missing") from None
+    if inside.returncode != 0:
+        raise Stop("This folder isn't a git repository yet. Reviewers read the app on GitHub.", fix='git init -b main && git add -A && git commit -m "First version", then push it to GitHub', doc="publish", code=FAILED, error="git_failed")
+    if subprocess.run(["git", "rev-parse", "--verify", "-q", "HEAD"], cwd=folder, capture_output=True, timeout=30).returncode != 0:
+        raise Stop("Nothing is committed yet.", fix='git add -A && git commit -m "First version" && git push', doc="publish", code=FAILED, error="git_failed")
     root = Path(git(folder, "rev-parse", "--show-toplevel")).resolve()
     if root != folder.resolve():
         raise Stop("The app must be at the top of its git repository: Mixel reads app.json there.", fix=f"move the app to its own repository (it is in {root})", doc="publish", code=FAILED, error="not_repo_root")
@@ -173,6 +181,8 @@ def where(folder: Path) -> dict:
     if dirty:
         raise Stop(f"There are changes that aren't committed ({dirty[0]}{' and more' if len(dirty) > 1 else ''}).", fix='git add -A && git commit -m "…" && git push', doc="publish", code=FAILED, error="git_dirty")
     commit = git(folder, "rev-parse", "HEAD")
+    if not git(folder, "remote"):
+        raise Stop("The repository has no remote: reviewers read the code on GitHub.", fix="create a public GitHub repository, then git remote add origin https://github.com/you/app.git && git push -u origin main", doc="publish", code=FAILED, error="not_github")
     remotes = git(folder, "branch", "-r", "--contains", "HEAD")
     if not remotes:
         raise Stop(f"Commit {commit[:7]} isn't pushed. Reviewers read the code on GitHub.", fix="git push", doc="publish", code=FAILED, error="git_not_pushed")
@@ -190,22 +200,18 @@ def publish(args: list[str]) -> int:
     message = args[args.index("--message") + 1] if "--message" in args and args.index("--message") + 1 < len(args) else None
     folder = Path.cwd()
     report = check.run(folder)
-    if not report.ok(strict=True):
+    if not dry and not report.ok(strict=True):
         if as_json:
             out.emit({"ok": False, "stage": "check", **report.json(strict=True)})
         else:
             check.show(report, strict=True)
             print("\nmixel publish needs mixel check --strict to pass: no errors, no warnings.")
         return FAILED
+    if dry:
+        return dry_run(folder, report, as_json)
     target = where(folder)
     data = report.data
     summary = {"app": data.get("name"), "version": data.get("version"), **target}
-    if dry:
-        if as_json:
-            out.emit({"ok": True, "dry_run": True, **summary})
-        else:
-            print(f"Checks     passed\nGit        {target['branch']} at {target['commit'][:7]}, pushed to {target['repository']}\nVersion    {data.get('version')}\nDry run: nothing was sent. Run mixel publish to submit it for review.")
-        return OK
     status, answer = call("POST", "/api/v1/registry/submissions", {**target, **({"message": message} if message else {})}, what="submissions")
     if status >= 400:
         raise problem(answer, "The registry refused the submission.")
@@ -217,6 +223,34 @@ def publish(args: list[str]) -> int:
         if answer.get("url"):
             print(f"Status     {answer['url']}   or   mixel status")
     return OK
+
+
+def dry_run(folder: Path, report, as_json: bool) -> int:
+    """Every gate publish passes, each with its fix, without sending anything."""
+    data = report.data
+    gates = []
+    problems = report.errors + report.warnings
+    gates.append({"gate": "check", "ok": not problems, "detail": "passed" if not problems else f"{out.count(len(report.errors), 'error')}, {out.count(len(report.warnings), 'warning')}", **({} if not problems else {"fix": "mixel check --strict shows each one with its fix"})})
+    target: dict = {}
+    try:
+        target = where(folder)
+        gates.append({"gate": "git", "ok": True, "detail": f"{target['branch']} at {target['commit'][:7]}, pushed to {target['repository']}"})
+    except Stop as stop:
+        gates.append({"gate": "git", "ok": False, "detail": stop.message, "fix": stop.fix, "code": stop.error})
+    signed = bool(token())
+    gates.append({"gate": "sign-in", "ok": signed, "detail": "signed in" if signed else "not signed in", **({} if signed else {"fix": "mixel login"})})
+    ok = all(gate["ok"] for gate in gates)
+    if as_json:
+        out.emit({"ok": ok, "dry_run": True, "app": data.get("name"), "version": data.get("version"), **target, "gates": gates})
+        return OK if ok else FAILED
+    labels = {"check": "Checks", "git": "Git", "sign-in": "Sign-in"}
+    for gate in gates:
+        print(f"{labels[gate['gate']]:<10} {'' if gate['ok'] else out.color('no', 'error') + '  '}{gate['detail']}")
+        if gate.get("fix"):
+            print(f"{'':<10} fix:  {gate['fix']}")
+    print(f"{'Version':<10} {data.get('version')}")
+    print("Dry run: nothing was sent. " + ("Run mixel publish to submit it for review." if ok else "Fix what says no, then run it again."))
+    return OK if ok else FAILED
 
 
 def status(args: list[str]) -> int:
