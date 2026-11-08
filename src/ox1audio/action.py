@@ -110,12 +110,12 @@ def action(title: str, *, timeout: float | None = None) -> Callable[[Callable], 
         raise TypeError(_teach(
             f"@ox.action needs a title: {fn.__name__}() was decorated with @ox.action and no title.",
             f'@ox.action("{_humanize(fn.__name__)}")',
-            "actions",
+            "actions#an-action",
         ))
     if not isinstance(title, str) or not title.strip():
-        raise TypeError(_teach("@ox.action(title): the title is the words on the button.", '@ox.action("Convert files")', "actions"))
+        raise TypeError(_teach("@ox.action(title): the title is the words on the button.", '@ox.action("Convert files")', "actions#an-action"))
     if timeout is not None and (not isinstance(timeout, (int, float)) or timeout <= 0):
-        raise TypeError(_teach(f"@ox.action(timeout={timeout!r}) is not a number of seconds.", '@ox.action("Split song", timeout=3600)', "actions"))
+        raise TypeError(_teach(f"@ox.action(timeout={timeout!r}) is not a number of seconds.", '@ox.action("Split song", timeout=3600)', "actions#an-action"))
 
     def decorate(fn: Callable) -> Callable:
         if inspect.isgeneratorfunction(fn) or inspect.isasyncgenfunction(fn):
@@ -125,11 +125,11 @@ def action(title: str, *, timeout: float | None = None) -> Callable[[Callable], 
                 "actions#progress-and-stop",
             ))
         if inspect.iscoroutinefunction(fn):
-            raise TypeError(_teach(f"{fn.__name__}() is async. Actions are plain functions; 0x1audio already runs them in the background.", f"def {fn.__name__}(...):", "actions"))
+            raise TypeError(_teach(f"{fn.__name__}() is async. Actions are plain functions; 0x1audio already runs them in the background.", f"def {fn.__name__}(...):", "actions#an-action"))
         name = fn.__name__
         existing = _registry.get(name)
         if existing is not None and existing.fn.__code__ is not fn.__code__:
-            raise ValueError(_teach(f"There are two actions called {name}.", "give one of the functions another name", "actions"))
+            raise ValueError(_teach(f"There are two actions called {name}.", "give one of the functions another name", "actions#an-action"))
         _registry[name] = Action(fn=fn, name=name, title=title.strip(), timeout=float(timeout or DEFAULT_TIMEOUT), params=_params(fn))
         fn.__ox_action__ = name  # type: ignore[attr-defined]
         return fn
@@ -150,7 +150,7 @@ def find(fn_or_name: Callable | str) -> Action:
     found = _registry.get(name) if isinstance(name, str) else None
     if found is None:
         label = fn_or_name if isinstance(fn_or_name, str) else getattr(fn_or_name, "__name__", repr(fn_or_name))
-        raise LookupError(_teach(f"{label} is not an action.", 'decorate it with @ox.action("…")', "actions"))
+        raise LookupError(_teach(f"{label} is not an action.", 'decorate it with @ox.action("…")', "actions#an-action"))
     return found
 
 

@@ -244,5 +244,23 @@ class CheckTest(unittest.TestCase):
         self.assertEqual(mixel("check", "--strict", cwd=self.app).returncode, 0)
 
 
+class DocLinkTest(unittest.TestCase):
+    def test_findings_link_pages_the_docs_site_serves(self):
+        from ox1audio.manifest import Finding
+
+        cases = {
+            ("fields", "app.json › name"): "reference/app-json#name",
+            ("fields", "app.json › window.width"): "reference/app-json#window",
+            ("sdk", "app.json › sdk"): "reference/app-json#sdk",
+            ("permissions", "app.json › permissions.files"): "permissions",
+            ("network", "app.json › permissions.network.hosts"): "permissions#network",
+            ("actions#an-action", "app.py:3"): "actions#an-action",
+            ("actions#never", "app.py:1"): "actions#never",
+            ("v1", "app.json"): "reference/app-json",
+        }
+        for (anchor, where), path in cases.items():
+            self.assertEqual(Finding("manifest_name", where, "m", "fix it", anchor).doc, f"https://docs.0x1audio.com/{path}")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -40,11 +40,27 @@ class Finding:
 
     @property
     def doc(self) -> str:
-        # anchor is "page#section", or a section of the app.json page.
-        return f"{DOCS}/{self.anchor if '#' in self.anchor or '/' in self.anchor else 'app-json#' + self.anchor}"
+        return f"{DOCS}/{_doc_path(self.anchor, self.where)}"
 
     def json(self) -> dict:
         return {"code": self.code, "severity": self.severity, "where": self.where, "message": self.message, "fix": self.fix, "doc": self.doc}
+
+
+# Pages of the docs site an anchor may name on its own; anything else is a field of app.json.
+_PAGES = {"actions", "page", "publish", "start", "permissions", "errors", "cli", "library", "audio", "design", "mcp", "tutorial"}
+
+
+def _doc_path(anchor: str, where: str = "") -> str:
+    """ "page#section" as is; "network" and the permission anchors on the permissions page;
+    "fields" (and other app.json sections) on the app.json reference, at the field the finding is about."""
+    if "#" in anchor or "/" in anchor or anchor in _PAGES - {"permissions"}:
+        return anchor
+    if anchor in {"permissions", "network"}:
+        return "permissions" if anchor == "permissions" else "permissions#network"
+    field = where.split("› ", 1)[1].split(".")[0] if "› " in where else ""
+    if anchor == "fields" and field in FIELDS:
+        return f"reference/app-json#{field}"
+    return "reference/app-json" if anchor in {"fields", "v1"} else f"reference/app-json#{anchor}"
 
 
 @dataclass

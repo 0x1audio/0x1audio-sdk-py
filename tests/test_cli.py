@@ -55,7 +55,7 @@ class NewAndCheckTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn('error  manifest_v0  app.json\n       app.json has no "$schema", so 0x1audio reads it as v0.', out)
         self.assertIn("fix:  add \"$schema\"", out)
-        self.assertIn("docs: https://docs.0x1audio.com/app-json#v1", out)
+        self.assertIn("docs: https://docs.0x1audio.com/reference/app-json\n", out)
 
     def test_a_missing_sdk_range_is_explained(self):
         app = self.new_app()

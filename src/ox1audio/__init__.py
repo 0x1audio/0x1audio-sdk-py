@@ -45,7 +45,7 @@ _DOCS = "https://docs.0x1audio.com"
 
 # Names that 0.2 had. Using one says what replaced it instead of a bare AttributeError.
 _removed = {
-    "screen": ('@ox.screen("Title") is now @ox.action("Title").', 'rename the decorator: @ox.action("Title")', "actions"),
+    "screen": ('@ox.screen("Title") is now @ox.action("Title").', 'rename the decorator: @ox.action("Title")', "actions#an-action"),
     "job": (
         "@ox.job is gone: every @ox.action already runs in the background with progress and Stop.",
         'use @ox.action("Title") with typed parameters, call ox.progress() as you go, and return the result',
@@ -54,7 +54,7 @@ _removed = {
     "serve": (
         "ox.serve is gone: 0x1audio finds your @ox.action functions and runs them.",
         'decorate each handler with @ox.action("Title") and delete the serve({...}) call',
-        "actions",
+        "actions#an-action",
     ),
     "Call": (
         "The call object is gone: actions take typed parameters.",
