@@ -77,7 +77,7 @@ class ConvertTest(unittest.TestCase):
 Python packages go in `pyproject.toml` › `[project].dependencies`, wheels only; 0x1audio installs only those (`mixel check --fix` adds what the code imports and runs `uv lock`; commit uv.lock. Then `uv venv && uv pip install -r pyproject.toml`). numpy, scipy and soundfile are fine. The SDK already has ffmpeg; don't add ffmpeg wrappers, pydub, or requests. Never commit models, songs, or files over 5 MB (a short test tone is fine).
 
 ## A page (only when the drawn form is not enough)
-A Vite + React page built to `dist/index.html`, set as `"page"`. It uses `@0x1audio/design-system` and calls the same actions:
+`mixel new --page` adds one: Vite + React, built to `dist/index.html`. It uses `@0x1audio/design-system` and the same actions:
 ```tsx
 import { ox } from "@0x1audio/sdk/page"
 import { ActionForm } from "@0x1audio/design-system"

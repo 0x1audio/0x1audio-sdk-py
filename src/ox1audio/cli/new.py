@@ -64,6 +64,84 @@ license = "{license}"
 dependencies = []
 """
 
+# --page: a Vite + React page around the same actions, built to dist/index.html.
+PAGE_FILES = {
+    "index.html": """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+""",
+    "vite.config.ts": """import tailwindcss from "@tailwindcss/vite"
+import react from "@vitejs/plugin-react"
+import {{ defineConfig }} from "vite"
+
+// Mixel opens dist/index.html from disk: relative paths, and no crossorigin on file://.
+export default defineConfig({{
+  plugins: [
+    react({{ exclude: /node_modules\\/(?!@0x1audio\\/design-system)/ }}),
+    tailwindcss(),
+    {{ name: "file-protocol", transformIndexHtml: (html) => html.replaceAll(" crossorigin", "") }},
+  ],
+  base: "./",
+  // One local bundle, read from disk: its size is fine.
+  build: {{ outDir: "dist", emptyOutDir: true, chunkSizeWarningLimit: 2000 }},
+}})
+""",
+    "tsconfig.json": """{{
+  "compilerOptions": {{
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["vite/client"],
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true
+  }},
+  "include": ["src"]
+}}
+""",
+    "src/index.css": """@import "tailwindcss";
+@import "@0x1audio/design-system/theme.css";
+""",
+    "src/main.tsx": """import {{ StrictMode }} from "react"
+import {{ createRoot }} from "react-dom/client"
+
+import {{ App }} from "./App.tsx"
+import "./index.css"
+
+// Mixel sets .dark on <html> when it is dark: the design system's tokens follow.
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+""",
+    "src/App.tsx": """import {{ ActionForm, PageHeader }} from "@0x1audio/design-system"
+
+// The form Mixel would draw for the convert action. Build your own page around it,
+// or call ox.run("convert", {{ files, format }}) from "@0x1audio/sdk/page".
+export function App() {{
+  return (
+    <main className="mx-auto flex max-w-2xl flex-col gap-6 p-8">
+      <PageHeader title="{title}" description="{summary}" />
+      <ActionForm action="convert" />
+    </main>
+  )
+}}
+""",
+}
+
 README = """# {title}
 
 {summary}
@@ -80,6 +158,7 @@ mixel dev     # open it in Mixel, reload on save
 
 def command(args: list[str]) -> int:
     license = "Apache-2.0"
+    page = "--page" in args
     words = []
     rest = iter(args)
     for arg in rest:
@@ -87,19 +166,29 @@ def command(args: list[str]) -> int:
             license = arg.split("=", 1)[1] if "=" in arg else next(rest, "")
             if not re.match(LICENSE_PATTERN, license):
                 raise Stop(f"{license or 'That'} is not an SPDX licence identifier.", fix='mixel new "Make It Louder" --license MIT', doc="reference/app-json#license")
+        elif arg not in {"--page"} and arg.startswith("--"):
+            raise Stop(f"mixel new has no option {arg}.", fix='mixel new "Make It Louder" [--page] [--license SPDX]')
         elif not arg.startswith("--"):
             words.append(arg)
     title = " ".join(words).strip()
     if not title:
         raise Stop('mixel new needs a name.', fix='mixel new "Make It Louder"', doc="start")
-    return new(Path.cwd() / slug(title), title, license)
+    return new(Path.cwd() / slug(title), title, license, page)
+
+
+def page_packages() -> dict[str, str]:
+    """Where @0x1audio/sdk and @0x1audio/design-system come from. Until they are on npm (GAB-40),
+    a checkout next to this SDK (how Mixel's own apps build) is linked with file:."""
+    projects = Path(__file__).resolve().parents[4]
+    local = {"@0x1audio/sdk": projects / "0x1audio-sdk-ts", "@0x1audio/design-system": projects / "0x1audio-cloud" / "packages" / "design-system"}
+    return {name: f"file:{path}" if (path / "package.json").is_file() else "^0.3.0" for name, path in local.items()}
 
 
 # The words about converting that an app must rewrite once it does something else (mixel check --strict).
 TEMPLATE_WORDS = {"summary": "Convert songs to another format.", "library": "Save the converted copies to your Library."}
 
 
-def new(directory: Path, title: str, license: str = "Apache-2.0") -> int:
+def new(directory: Path, title: str, license: str = "Apache-2.0", page: bool = False) -> int:
     if directory.exists() and any(directory.iterdir()):
         raise Stop(f"{directory.name}/ already has files in it.", fix=f'choose another name, or delete {directory.name}/', code=FAILED, error="folder_not_empty")
     name = directory.name
@@ -114,6 +203,7 @@ def new(directory: Path, title: str, license: str = "Apache-2.0") -> int:
             "version": "0.1.0",
             "sdk": f"^{'.'.join(__version__.split('.')[:2])}",
             "entry": "app.py",
+            **({"page": "dist/index.html"} if page else {}),
             "license": license,
             "permissions": {
                 "files": "Open the songs you choose.",
@@ -127,6 +217,15 @@ def new(directory: Path, title: str, license: str = "Apache-2.0") -> int:
         "README.md": README.format(title=title, summary=summary),
         ".gitignore": GITIGNORE,
     }
+    if page:
+        for file, body in PAGE_FILES.items():
+            files[file] = body.format(title=title.replace('"', ""), summary=summary)
+        files["package.json"] = json.dumps({
+            "name": name, "license": license, "private": True, "version": "0.1.0", "type": "module",
+            "scripts": {"dev": "vite", "build": "vite build"},
+            "dependencies": {**page_packages(), "react": "^19", "react-dom": "^19"},
+            "devDependencies": {"@tailwindcss/vite": "^4", "@types/react": "^19", "@types/react-dom": "^19", "@vitejs/plugin-react": "^5", "tailwindcss": "^4", "typescript": "^5", "vite": "^7"},
+        }, indent=2) + "\n"
     # Apache-2.0 by default, like Mixel's own apps. Another licence: bring its text as LICENSE.
     if license == "Apache-2.0":
         files["LICENSE"] = Path(__file__).resolve().parents[1].joinpath("templates", "Apache-2.0.txt").read_text()
@@ -144,11 +243,13 @@ def new(directory: Path, title: str, license: str = "Apache-2.0") -> int:
         "tests/test_app.py": "runs convert on tests/tone.wav",
         "pyproject.toml": "Python packages your app needs",
         "LICENSE": "Apache-2.0; mixel new --license MIT picks another" if license == "Apache-2.0" else f"add the {license} text here",
+        **({"src/App.tsx": "the page: ActionForm for convert, build around it"} if page else {}),
     }
     width = max(len(file) for file in notes)
     for file, note in notes.items():
         print(f"  {file.ljust(width)}  {note}")
-    print(f"Next\n  cd {name}\n  mixel check   the rules Mixel and its reviewers apply\n  mixel test    run tests/\n  mixel dev     open it in Mixel, reload on save")
+    build = "\n  npm install && npm run build   the page, into dist/" if page else ""
+    print(f"Next\n  cd {name}{build}\n  mixel check   the rules Mixel and its reviewers apply\n  mixel test    run tests/\n  mixel dev     open it in Mixel, reload on save")
     return OK
 
 

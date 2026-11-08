@@ -13,7 +13,7 @@ from ox1audio.cli.out import DOCS, OK, Stop, stop
 
 _SECTIONS = [
     ("Start", [
-        ('new "My App"', "start an app in ./my-app (Apache-2.0 unless --license names another)", "--license SPDX"),
+        ('new "My App"', "start an app in ./my-app (Apache-2.0 unless --license names another); --page adds a React page", "--page --license SPDX"),
         ("dev", "open this app in Mixel, reload it on save", ""),
     ]),
     ("Check", [

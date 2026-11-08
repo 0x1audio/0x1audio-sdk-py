@@ -91,5 +91,32 @@ class DogfoodTest(unittest.TestCase):
         self.assertIn("out/", (self.app / ".gitignore").read_text())
 
 
+
+class PageScaffoldTest(unittest.TestCase):
+    def test_new_page_writes_a_vite_page_mixel_can_open(self):
+        with tempfile.TemporaryDirectory() as root:
+            made = mixel("new", "Loop Maker", "--page", cwd=root)
+            self.assertEqual(made.returncode, 0, made.stderr)
+            self.assertIn("npm install && npm run build", made.stdout)
+            app = Path(root) / "loop-maker"
+            self.assertEqual(json.loads((app / "app.json").read_text())["page"], "dist/index.html")
+            package = json.loads((app / "package.json").read_text())
+            self.assertEqual(package["license"], "Apache-2.0")
+            self.assertEqual(set(package["dependencies"]) >= {"@0x1audio/sdk", "@0x1audio/design-system", "react"}, True)
+            self.assertIn('base: "./"', (app / "vite.config.ts").read_text())
+            self.assertIn('<ActionForm action="convert" />', (app / "src" / "App.tsx").read_text())
+            report = json.loads(mixel("check", "--json", cwd=app).stdout)
+            self.assertEqual([(item["code"], item["fix"]) for item in report["errors"]], [("manifest_page", "build the page (npm run build)")])
+            (app / "dist").mkdir()
+            (app / "dist" / "index.html").write_text("<!doctype html>")
+            self.assertTrue(json.loads(mixel("check", "--json", "--strict", cwd=app).stdout)["ok"])
+
+    def test_an_unknown_option_names_the_ones_there_are(self):
+        with tempfile.TemporaryDirectory() as root:
+            done = mixel("new", "X", "--pages", cwd=root)
+            self.assertEqual(done.returncode, 2)
+            self.assertIn("--page", done.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
