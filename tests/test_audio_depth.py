@@ -47,7 +47,7 @@ class BitDepthTest(unittest.TestCase):
         self.assertEqual(ox.audio.probe(ox.audio.write(tone, 44100, "wav", bits=16)).bits, 16)
 
     def test_a_wrong_depth_names_the_fix(self):
-        with self.assertRaisesRegex(ValueError, r"16, 24 or 32[\s\S]*fix:"):
+        with self.assertRaisesRegex(ValueError, r"16, 24, or 32 for float[\s\S]*fix:"):
             ox.audio.convert(self.song, "wav", bits=20)
 
 

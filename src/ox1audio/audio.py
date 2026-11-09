@@ -14,7 +14,7 @@ from typing import Callable
 
 _duration = re.compile(r"Duration: (\d+):(\d{2}):(\d{2}(?:\.\d+)?)")
 _stream = re.compile(r"Stream #\d+:\d+[^:]*: Audio: ([^,\n]+), (\d+) Hz, ([^,\n]+)(?:, ([^,\n]+))?(?:, (\d+) kb/s)?")
-_layouts = {"mono": 1, "stereo": 2, "2.1": 3, "3.0": 3, "quad": 4, "4.0": 4, "5.0": 5, "5.1": 6, "6.1": 7, "7.1": 8}
+_known = {"mono": 1, "stereo": 2, "2.1": 3, "3.0": 3, "quad": 4, "4.0": 4, "5.0": 5, "5.1": 6, "6.1": 7, "7.1": 8}
 
 
 @dataclass(frozen=True)
@@ -137,12 +137,37 @@ def _depth(codec: str, sample: str) -> tuple[int | None, bool]:
     return None, False
 
 
+@functools.cache
+def _layouts() -> dict[str, int]:
+    """Every standard layout this ffmpeg knows, with its channel count: "hexagonal" is 6 (GAB-135)."""
+    table = dict(_known)
+    try:
+        listed = subprocess.run([ffmpeg(), "-hide_banner", "-layouts"], capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        return table
+    standard = listed.split("Standard channel layouts:", 1)[-1]
+    for line in standard.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0] != "NAME":
+            table[parts[0]] = len(parts[1].split("+"))
+    return table
+
+
 def channel_count(layout: str) -> int:
     layout = layout.strip()
     counted = re.match(r"(\d+) channels", layout)
     if counted:
         return int(counted.group(1))
-    return _layouts.get(layout.split("(")[0], 2)
+    table = _layouts()
+    name = layout.split(" ")[0]
+    if name in table:
+        return table[name]
+    if name.split("(")[0] in table:
+        return table[name.split("(")[0]]
+    # A custom layout like "FL+FR+LFE": one channel per name.
+    if "+" in name:
+        return len(name.split("+"))
+    raise ValueError(f"The channel layout {layout!r} isn't one Mixel knows, so its channels can't be counted.")
 
 
 def available() -> list[str]:
@@ -177,14 +202,14 @@ def convert(
     It goes in ``folder`` (a new temporary folder when None) and never replaces a file
     that is already there: next to the original, ``song.wav`` becomes ``song 2.wav``.
     WAV, AIFF and FLAC keep the source's bit depth (24-bit from lossy sources like MP3);
-    ``bits=16`` or ``24`` (or ``32`` for WAV and AIFF) asks for another.
+    ``bits=16`` or ``24`` asks for another, and ``bits=32`` is 32-bit float (WAV and AIFF).
+    Going to fewer bits adds TPDF dither, so quiet audio doesn't distort.
+    Tags, cover art, BPM, key and loop points come along wherever the format can hold them.
     """
-    if bits is not None and bits not in (16, 24, 32):
-        from ox1audio.action import _teach
-
-        raise ValueError(_teach(f"ox.audio.convert(bits={bits!r}): the bit depth is 16, 24 or 32.", 'ox.audio.convert(path, "wav", bits=16)', "actions#helpers"))
+    _check_bits("convert", bits)
     source = probe(path)
     fmt = find(format_id)
+    _check_float(fmt, bits, "convert")
     out = Path(folder) if folder else _temp()
     target = _unused(out / f"{Path(source.name).stem}.{fmt.ext}")
     channels = source.channels if fmt.max_channels is None else min(source.channels, fmt.max_channels)
@@ -192,34 +217,72 @@ def convert(
     if fmt.rates and rate not in fmt.rates:
         lower = [item for item in fmt.rates if item <= rate]
         rate = max(lower) if lower else min(fmt.rates)
-    args = [
-        ffmpeg(), "-hide_banner", "-nostdin", "-y",
-        "-i", source.path,
-        "-map", "0:a:0", "-vn", "-sn", "-dn",
-        *_codec(fmt, source, bits),
-        "-ar", str(rate), "-ac", str(channels),
-    ]
+    from ox1audio import _tags
+
+    extras = _tags.read(Path(source.path))
+    codec, dither = _codec(fmt, source, bits)
+    args = [ffmpeg(), "-hide_banner", "-nostdin", "-y", "-i", source.path, "-map", "0:a:0"]
+    # Cover art rides along where the format holds a picture; everything else stays behind.
+    picture = fmt.id in _tags.PICTURE_FORMATS and extras.cover
+    args += ["-map", "0:v:disp:attached_pic?", "-c:v", "copy", "-disposition:v", "attached_pic"] if picture else ["-vn"]
+    args += ["-sn", "-dn", *codec]
+    if dither:
+        args += ["-af", dither]
+    args += ["-ar", str(rate)]
+    # Only ever fewer channels, when the format can't hold more: never a remix of a known layout (GAB-135).
+    if channels != source.channels:
+        args += ["-ac", str(channels)]
     if fmt.bitrates:
         args += ["-b:a", f"{fmt.bitrates[-1]}k"]
-    args += list(fmt.extra)
+    args += [*fmt.extra, *_tags.metadata_args(fmt.id, extras, rate / source.rate if source.rate else 1.0)]
     args += ["-f", fmt.muxer, "-progress", "pipe:1", "-nostats", str(target)]
     step = _Plan(source, fmt, target, args)
-    return _run(step, on_progress)
+    done = _run(step, on_progress)
+    try:
+        _tags.finish(done, fmt.id, extras)
+    except BaseException:
+        done.unlink(missing_ok=True)
+        raise
+    return done
 
 
-def _codec(fmt: Format, source: Info, bits: int | None) -> list[str]:
-    """The encoder for ``fmt``. Lossless targets keep the source's depth: a 16-bit WAV stays 16-bit."""
+def _check_bits(name: str, bits: int | None) -> None:
+    if bits is not None and (isinstance(bits, bool) or bits not in (16, 24, 32)):
+        from ox1audio.action import _teach
+
+        example = 'ox.audio.convert(path, "wav", bits=16)' if name == "convert" else 'ox.audio.write(samples, rate, "wav", bits=16)'
+        raise ValueError(_teach(f"ox.audio.{name}(bits={bits!r}): the bit depth is 16, 24, or 32 for float.", example, "audio#bit-depth"))
+
+
+def _check_float(fmt: Format, bits: int | None, name: str) -> None:
+    if bits == 32 and fmt.id not in ("wav", "aiff"):
+        from ox1audio.action import _teach
+
+        raise ValueError(_teach(f"ox.audio.{name}(..., \"{fmt.id}\", bits=32): 32 bits is float, which only WAV and AIFF hold.", f'"wav" with bits=32, or "{fmt.id}" with bits=24' if fmt.lossless else '"wav" with bits=32', "audio#bit-depth"))
+
+
+def _codec(fmt: Format, source: Info, bits: int | None) -> tuple[list[str], str | None]:
+    """The encoder for ``fmt``, and the dither filter when the depth goes down (GAB-132).
+
+    Lossless targets keep the source's depth: a 16-bit WAV stays 16-bit, bit for bit.
+    ``bits=32`` is 32-bit float. A float source stays float in WAV and AIFF unless ``bits`` says otherwise.
+    """
     if not fmt.lossless:
-        return ["-c:a", fmt.encoder]
-    depth = bits or source.bits or 24
-    floating = bits is None and source.float
-    if fmt.id == "flac":
-        # FLAC is integer only, up to 24 bits here.
-        return ["-c:a", "flac", "-sample_fmt", "s16"] if depth <= 16 else ["-c:a", "flac", "-sample_fmt", "s32", "-bits_per_raw_sample", "24"]
+        return ["-c:a", fmt.encoder], None
     endian = "be" if fmt.id == "aiff" else "le"
+    floating = bits == 32 or (bits is None and source.float and fmt.id != "flac")
     if floating:
-        return ["-c:a", f"pcm_f32{endian}"]
-    return ["-c:a", f"pcm_s{depth if depth in (16, 24, 32) else 24}{endian}"]
+        return ["-c:a", f"pcm_f32{endian}"], None
+    # 32-bit integer sources become 24-bit: FLAC holds 24 at most, and float is how to keep more.
+    depth = bits or (source.bits if source.bits in (16, 24) else 24)
+    # Lossy and float sources have more precision than any integer depth; so does 32-bit integer.
+    deeper = source.float or source.bits is None or source.bits > depth
+    if depth == 16:
+        codec = ["-c:a", "flac", "-sample_fmt", "s16"] if fmt.id == "flac" else ["-c:a", f"pcm_s16{endian}"]
+        return codec, "aresample=osf=s16:dither_method=triangular" if deeper else None
+    codec = ["-c:a", "flac", "-sample_fmt", "s32", "-bits_per_raw_sample", "24"] if fmt.id == "flac" else ["-c:a", f"pcm_s24{endian}"]
+    # 24 bits travel in a 32-bit container: dither at the 24th bit (2^8 of the container's last bit).
+    return codec, "aresample=osf=s32:dither_method=triangular:dither_scale=256" if deeper else None
 
 
 def _unused(path: Path) -> Path:
@@ -301,7 +364,8 @@ def read(path: str | Path):
     np = _numpy()
     info = probe(path)
     result = subprocess.run(
-        [ffmpeg(), "-hide_banner", "-nostdin", "-v", "error", "-i", info.path, "-map", "0:a:0", "-vn", "-f", "f32le", "-acodec", "pcm_f32le", "-ac", str(info.channels), "-"],
+        # No -ac: every channel as it is, never a downmix (GAB-135).
+        [ffmpeg(), "-hide_banner", "-nostdin", "-v", "error", "-i", info.path, "-map", "0:a:0", "-vn", "-f", "f32le", "-acodec", "pcm_f32le", "-"],
         capture_output=True,
         timeout=3600,
     )
@@ -317,12 +381,12 @@ def write(samples, rate: int, format_id: str = "wav", folder: str | Path | None 
     """Write samples (``(frames, channels)`` or one channel) as a new file and return it.
 
     It goes in ``folder`` (a new temporary folder when None) as ``name.<ext>``, never over
-    a file that is there. WAV, AIFF and FLAC are 24-bit unless ``bits`` says 16 (or 32).
+    a file that is there. WAV, AIFF and FLAC are 24-bit unless ``bits`` says 16, or 32 for
+    float (WAV and AIFF). Fewer bits than the samples carry get TPDF dither; samples that
+    already fit the depth are written exactly. Samples over full scale (above 1.0) are
+    refused rather than clipped, unless the file is float.
     """
-    if bits is not None and bits not in (16, 24, 32):
-        from ox1audio.action import _teach
-
-        raise ValueError(_teach(f"ox.audio.write(bits={bits!r}): the bit depth is 16, 24 or 32.", 'ox.audio.write(samples, rate, "wav", bits=16)', "actions#helpers"))
+    _check_bits("write", bits)
     np = _numpy()
     data = np.asarray(samples, dtype="<f4")
     if data.ndim == 1:
@@ -330,6 +394,23 @@ def write(samples, rate: int, format_id: str = "wav", folder: str | Path | None 
     if data.ndim != 2 or data.shape[1] < 1 or data.shape[1] > 32:
         raise ValueError("ox.audio.write takes samples shaped (frames, channels).")
     fmt = find(format_id)
+    _check_float(fmt, bits, "write")
+    from ox1audio.action import _teach
+
+    if not np.isfinite(data).all():
+        raise ValueError(_teach("ox.audio.write: the samples have NaN or infinite values.", "find the division by zero or the empty mean that made them", "audio#levels"))
+    floating = fmt.lossless and bits == 32
+    peak = float(np.max(np.abs(data))) if data.size else 0.0
+    if peak > 1.0 and not floating:
+        import math
+
+        over = 20 * math.log10(peak)
+        what = f"{bits or 24}-bit {fmt.label}" if fmt.lossless else fmt.label
+        raise ValueError(_teach(
+            f"ox.audio.write: the samples peak at +{over:.1f} dBFS, over full scale, so {what} would clip them.",
+            f"lower the gain (samples * {math.floor(1 / peak * 100) / 100}), or write \"wav\" with bits=32 (float keeps overs)",
+            "audio#levels",
+        ))
     rate = int(rate)
     out = Path(folder) if folder else _temp()
     out.mkdir(parents=True, exist_ok=True)
@@ -340,13 +421,41 @@ def write(samples, rate: int, format_id: str = "wav", folder: str | Path | None 
         out_rate = max(lower) if lower else min(fmt.rates)
     else:
         out_rate = rate
-    depth = Info(path="", name=name, codec="pcm_f32le", rate=rate, channels=data.shape[1], duration=0.0, bitrate=None, bits=24)
-    args = [ffmpeg(), "-hide_banner", "-nostdin", "-v", "error", "-f", "f32le", "-ar", str(rate), "-ac", str(data.shape[1]), "-i", "-", *_codec(fmt, depth, bits), "-ar", str(out_rate), "-ac", str(channels)]
+    endian = "be" if fmt.id == "aiff" else "le"
+    if not fmt.lossless:
+        raw, codec = ("f32le", np.ascontiguousarray(data).tobytes()), ["-c:a", fmt.encoder]
+    elif floating:
+        raw, codec = ("f32le", np.ascontiguousarray(data).tobytes()), ["-c:a", f"pcm_f32{endian}"]
+    else:
+        depth = bits or 24
+        pcm = _quantize(np, data, depth)
+        if depth == 16:
+            raw = ("s16le", pcm.astype("<i2").tobytes())
+            codec = ["-c:a", "flac", "-sample_fmt", "s16"] if fmt.id == "flac" else ["-c:a", f"pcm_s16{endian}"]
+        else:
+            # 24 bits in a 32-bit container, low byte zero, so the encoder keeps them exactly.
+            raw = ("s32le", (pcm.astype("<i4") << 8).tobytes())
+            codec = ["-c:a", "flac", "-sample_fmt", "s32", "-bits_per_raw_sample", "24"] if fmt.id == "flac" else ["-c:a", f"pcm_s24{endian}"]
+    args = [ffmpeg(), "-hide_banner", "-nostdin", "-v", "error", "-f", raw[0], "-ar", str(rate), "-ac", str(data.shape[1]), "-i", "-", *codec, "-ar", str(out_rate)]
+    if channels != data.shape[1]:
+        args += ["-ac", str(channels)]
     if fmt.bitrates:
         args += ["-b:a", f"{fmt.bitrates[-1]}k"]
     args += [*fmt.extra, "-f", fmt.muxer, str(target)]
-    result = subprocess.run(args, input=np.ascontiguousarray(np.clip(data, -1, 1)).tobytes(), capture_output=True, timeout=3600)
+    result = subprocess.run(args, input=raw[1], capture_output=True, timeout=3600)
     if result.returncode != 0:
         target.unlink(missing_ok=True)
         raise RuntimeError(result.stderr.decode(errors="replace").strip().splitlines()[-1:] or "The file couldn't be written.")
     return target
+
+
+def _quantize(np, data, depth: int):
+    """Samples as integers at ``depth`` bits: exact when they already fit, else with TPDF dither (GAB-132)."""
+    scale = float(2 ** (depth - 1))
+    scaled = data.astype(np.float64) * scale
+    rounded = np.round(scaled)
+    if not np.array_equal(scaled, rounded):
+        # Triangular dither of one step, the same every run so outputs can be compared.
+        noise = np.random.default_rng(0x0A0D10)
+        rounded = np.round(scaled + noise.random(scaled.shape) - noise.random(scaled.shape))
+    return np.clip(rounded, -scale, scale - 1).astype(np.int32)

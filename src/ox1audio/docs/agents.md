@@ -40,15 +40,15 @@ class ConvertTest(unittest.TestCase):
         run = ox.test(app.convert, files=["tests/tone.wav"], format="wav")
         self.assertEqual(run["items"][0]["title"], "tone")  # what reached the Library
 ```
-`ox.test` returns `{"result", "items", "progress", "events"}`: what a page gets, the Library items (`id, kind, title, path, metadata`), each `(fraction, label)` and `(name, body)`. `stop_at=0.5` presses Stop halfway: it raises `ox.Cancelled`, whose `.kept` lists what was kept. `ox.Problem` is raised as is.
+`ox.test` returns `{"result", "items", "progress", "events"}`: what a page gets, the Library items, each `(fraction, label)` and `(name, body)`. `stop_at=0.5` presses Stop halfway: it raises `ox.Cancelled`, whose `.kept` lists what was kept. `ox.Problem` is raised as is.
 
 ## Helpers
 | Need | Use |
 | --- | --- |
 | File info | `ox.audio.probe(path)` → `.rate .channels .duration .codec` |
-| Another format | `ox.audio.convert(path, "wav" / "aiff" / "flac" / "mp3" / "aac" / "ogg" / "opus", folder=None, bits=None)` → `Path` (lossless keeps the source's bit depth) |
-| Samples (numpy) | `ox.audio.read(path)` → `(samples, rate)`, float32 shaped `(frames, channels)`; `ox.audio.write(samples, rate, "wav", folder=None, name="audio")` → `Path` (24-bit) |
-| A folder for new files | `ox.temp()` → an empty folder, removed when the app closes. `folder=None` above uses one. |
+| Another format | `ox.audio.convert(path, "wav" / "aiff" / "flac" / "mp3" / "aac" / "ogg" / "opus", folder=None, bits=None)` → `Path` (keeps depth, tags, cover, loops) |
+| Samples (numpy) | `ox.audio.read(path)` → `(samples, rate)`, float32 shaped `(frames, channels)`; `ox.audio.write(samples, rate, "wav", folder=None, name="audio", bits=24)` → `Path`. `bits=32` is float; 16 dithers. Over ±1 raises: lower the gain, or use float. |
+| A folder for new files | `ox.temp()` → an empty folder, removed when the app closes |
 | The app's own files | `ox.data.read / read_text / write / list / remove("presets/a.json")` (needs `data`) |
 
 ## app.json
@@ -74,7 +74,7 @@ class ConvertTest(unittest.TestCase):
 - Raise `version` before each release. Never change `name`.
 
 ## Dependencies
-Python packages go in `pyproject.toml` › `[project].dependencies`, wheels only; Mixel installs only those (`mixel check --fix` adds what the code imports, then runs `uv sync`; commit uv.lock). numpy, scipy and soundfile are fine. The SDK already has ffmpeg; don't add ffmpeg wrappers, pydub, or requests. Never commit models, songs, or files over 5 MB (a short test tone is fine).
+Python packages go in `pyproject.toml` › `[project].dependencies`, wheels only; Mixel installs only those (`mixel check --fix` adds what the code imports, then runs `uv sync`; commit uv.lock). numpy and scipy are fine. The SDK already has ffmpeg; don't add ffmpeg wrappers, pydub, or requests. Never commit models, songs, or files over 5 MB (a short test tone is fine).
 
 ## A page (only when the drawn form is not enough)
 `mixel new --page` adds one: Vite + React, built to `dist/index.html`. It uses `@0x1audio/design-system` and the same actions:

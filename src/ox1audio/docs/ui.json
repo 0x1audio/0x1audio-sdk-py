@@ -105,6 +105,18 @@
    "use": "an icon on a plate (empty states, step lists, settings hubs)."
   },
   {
+   "name": "AppIcon",
+   "group": "Structure",
+   "props": "name: string, accent?: string, icon?: string, size?: AppIconSize, className?: string",
+   "use": "the tile that stands for an app, everywhere (desktop, web, docs)."
+  },
+  {
+   "name": "Avatar",
+   "group": "Structure",
+   "props": "name: string, src?: string, size?: keyof typeof avatarSizes, className?: string",
+   "use": "a person, as the first letter of their name or email on a bg-secondary disc, or their photo."
+  },
+  {
    "name": "EmptyState",
    "group": "Feedback",
    "props": "icon, title, description, actions, pixel, className, children, ...props",
@@ -191,6 +203,7 @@
  ],
  "helpers": [
   "clock(seconds: number)",
+  "lightAccent(hex: string)",
   "waveformFrom(source: Blob | Uint8Array, bars = 120): Promise<Wave>"
  ],
  "types": {
