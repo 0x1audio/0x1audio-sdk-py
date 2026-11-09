@@ -58,7 +58,7 @@ def run(folder: Path, pattern: str | None = None) -> dict:
     for item in failed:
         if item.get("missing"):
             name = item["missing"]
-            item["fix"] = f"{name} isn't installed where the tests run. List it in pyproject.toml › [project].dependencies (mixel check --fix does), then: uv venv && uv pip install -r pyproject.toml"
+            item["fix"] = f"{name} isn't installed where the tests run. List it in pyproject.toml › [project].dependencies (mixel check --fix does), then: uv sync"
     found = bool(result["passed"] or failed or result["skipped"])
     output = (done.stdout + done.stderr).strip().splitlines()
     return {
@@ -76,7 +76,7 @@ def run(folder: Path, pattern: str | None = None) -> dict:
 
 
 def interpreter(folder: Path) -> str:
-    """The app's .venv when it has one (mixel dev and uv venv make it), else the Python mixel runs on."""
+    """The app's .venv when it has one (uv sync and mixel dev make it), else the Python mixel runs on."""
     for candidate in (folder / ".venv" / "bin" / "python", folder / ".venv" / "Scripts" / "python.exe"):
         if candidate.is_file():
             return str(candidate)

@@ -74,7 +74,7 @@ class ConvertTest(unittest.TestCase):
 - Raise `version` before each release. Never change `name`.
 
 ## Dependencies
-Python packages go in `pyproject.toml` › `[project].dependencies`, wheels only; Mixel installs only those (`mixel check --fix` adds what the code imports and runs `uv lock`; commit uv.lock). numpy, scipy and soundfile are fine. The SDK already has ffmpeg; don't add ffmpeg wrappers, pydub, or requests. Never commit models, songs, or files over 5 MB (a short test tone is fine).
+Python packages go in `pyproject.toml` › `[project].dependencies`, wheels only; Mixel installs only those (`mixel check --fix` adds what the code imports, then runs `uv sync`; commit uv.lock). numpy, scipy and soundfile are fine. The SDK already has ffmpeg; don't add ffmpeg wrappers, pydub, or requests. Never commit models, songs, or files over 5 MB (a short test tone is fine).
 
 ## A page (only when the drawn form is not enough)
 `mixel new --page` adds one: Vite + React, built to `dist/index.html`. It uses `@0x1audio/design-system` and the same actions:

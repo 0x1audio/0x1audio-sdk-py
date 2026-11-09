@@ -141,7 +141,7 @@ class TestAndRunTest(Scratch):
         result = json.loads(mixel("test", "--json", cwd=app).stdout)
         missing = [item for item in result["failed"] if item.get("missing")]
         self.assertEqual(missing[0]["missing"], "not_a_real_package_xyz")
-        self.assertIn("uv pip install -r pyproject.toml", missing[0]["fix"])
+        self.assertIn("uv sync", missing[0]["fix"])
 
     def test_check_errors_stop_the_tests(self):
         app = self.new_app()

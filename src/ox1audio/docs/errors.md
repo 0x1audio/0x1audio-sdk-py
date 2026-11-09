@@ -31,7 +31,7 @@ Every error has a code, what happened, and the fix. The message you see names th
 | `permission_reason` | A permission without a reason of 12 to 120 characters. | One sentence that tells the person why, like "Open the songs you choose." |
 | `network_hosts` | network without a list of hosts, or with the whole web, an IP or localhost. | "network": { "why": "Download the model once.", "hosts": ["github.com"] } |
 | `dependency_missing` | The code imports a package pyproject.toml doesn't list, so Mixel won't install it. | Add it to pyproject.toml › [project].dependencies. |
-| `dependency_not_installed` | A listed package isn't installed where mixel runs, so the actions couldn't be loaded. | uv venv && uv pip install -r pyproject.toml |
+| `dependency_not_installed` | A listed package isn't installed where mixel runs, so the actions couldn't be loaded. | uv sync (mixel check --fix runs it) |
 | `lock_missing` | pyproject.toml lists packages but there is no uv.lock, so Mixel and the registry can't install exactly what was reviewed. | uv lock, then commit uv.lock. mixel check --fix runs it. |
 | `banned_api` | The code runs programs, opens raw sockets, runs code from strings, or imports by a name it builds (subprocess, os.system, socket, ctypes, eval, exec, __import__, requests). | Use ox.audio.convert, ox.audio.read or ox.audio.write instead of programs; urllib.request with a declared network for downloads; plain imports. |
 | `path_outside` | The code opens a fixed path outside the app, like /etc/passwd, /tmp or the home folder. | Use the files the person chooses (ox.Files, ox.Folder), ox.temp() or ox.data. |

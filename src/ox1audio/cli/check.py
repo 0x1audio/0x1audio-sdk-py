@@ -90,10 +90,15 @@ def run(folder: Path, fix: bool = False) -> Report:
     folder = folder.resolve()
     report = _run(folder)
     if fix:
-        fixed = _fix(folder, report)
-        if fixed:
+        fixed: list[str] = []
+        # Twice at most: installing packages can let the actions load, which shows what else to fix.
+        for _ in range(2):
+            done = _fix(folder, report)
+            if not done:
+                break
+            fixed += done
             report = _run(folder)
-            report.fixed = fixed
+        report.fixed = fixed
     return report
 
 
@@ -189,7 +194,10 @@ def _load_in_app(folder: Path, entry: Path):
 
 
 def _fix_lock(folder: Path, report: Report) -> list[str]:
-    if not any(item.code == "lock_missing" for item in report.findings):
+    """uv sync when listed packages aren't installed (it locks too), else uv lock when uv.lock is missing."""
+    codes = {item.code for item in report.findings}
+    install = bool(codes & {"dependency_not_installed", "dependency_missing"}) and bool(_declared(folder))
+    if not install and "lock_missing" not in codes:
         return []
     import shutil
     import subprocess
@@ -197,8 +205,15 @@ def _fix_lock(folder: Path, report: Report) -> list[str]:
     uv = shutil.which("uv")
     if not uv:
         return []
-    done = subprocess.run([uv, "lock", "--quiet"], cwd=folder, capture_output=True, text=True, timeout=600)
-    return ["uv.lock written by uv lock: commit it with the app"] if done.returncode == 0 else []
+    had_lock = (folder / "uv.lock").is_file()
+    command = [uv, "sync", "--quiet"] if install else [uv, "lock", "--quiet"]
+    done = subprocess.run(command, cwd=folder, capture_output=True, text=True, timeout=1800)
+    if done.returncode != 0:
+        return []
+    fixed = ["packages installed into .venv by uv sync"] if install else []
+    if not had_lock and (folder / "uv.lock").is_file():
+        fixed.append(f"uv.lock written by uv {'sync' if install else 'lock'}: commit it with the app")
+    return fixed
 
 
 def _todo(code: str) -> str:
@@ -242,7 +257,7 @@ def _fix_dependencies(folder: Path, report: Report) -> list[str]:
     current += [f'"{name}"' for name in names]
     text = text[: match.start(1)] + ", ".join(current) + text[match.end(1):]
     path.write_text(text)
-    return [f"pyproject.toml lists {name} now: install it with uv venv && uv pip install -r pyproject.toml" for name in names]
+    return [f"pyproject.toml lists {name} now" for name in names]
 
 
 def _load(entry: Path):
@@ -259,7 +274,7 @@ def _load(entry: Path):
     except ModuleNotFoundError as exc:
         missing = (exc.name or "").split(".")[0]
         if missing and _normal(_dist_names.get(missing, missing)) in _declared(entry.parent):
-            return [], Finding("dependency_not_installed", entry.name, f"{missing} is in pyproject.toml but not installed, so the actions couldn't be checked.", "uv venv && uv pip install -r pyproject.toml   (mixel check, test and run use the app's .venv)", "actions#dependencies")
+            return [], Finding("dependency_not_installed", entry.name, f"{missing} is in pyproject.toml but not installed, so the actions couldn't be checked.", "uv sync   (installs into the app's .venv, which mixel check, test and run use, and writes uv.lock; mixel check --fix runs it)", "actions#dependencies")
         return [], Finding("dependency_missing", f"{entry.name}{_line_of(exc, entry)}", f"{entry.name} imports {missing}, but pyproject.toml doesn't list it, so Mixel won't install it.", f'add "{_dist_names.get(missing, missing)}" to pyproject.toml › [project].dependencies', "actions#dependencies")
     except Exception as exc:  # noqa: BLE001 - every failure is reported as a finding
         text = str(exc)
