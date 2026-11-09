@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -445,10 +446,39 @@ def serve(stdin=None, stdout=None, read_only: bool = False, features: set[str] |
         sink.flush()
 
 
+# Tono, Mixel's listener (brand: packages/design-system/brand/tono). The head is the mark, its
+# eyes the m's counters, its body a pixel meter at rest. Two characters make one square.
+_HEAD = ("#####", "#.#.#", "#.#.*")
+_BODY = (2, 3, 3, 3, 2)
+_LIT = "\x1b[38;2;205;91;217m"
+
+
+def banner(color: bool) -> str:
+    """Tono and one line on what this is, for a person watching the terminal. Never on stdout."""
+    lit = (_LIT + "██" + "\x1b[0m") if color else "▓▓"
+    head = ["".join({"#": "██", ".": "  ", "*": lit}[cell] for cell in row) for row in _HEAD]
+    body = ["".join("▪ " if level >= height else "  " for level in _BODY).rstrip() for height in (3, 2, 1)]
+    dim = (lambda text: f"\x1b[2m{text}\x1b[0m") if color else (lambda text: text)
+    words = [
+        "Tono · Mixel's MCP server for coding agents",
+        dim("Your agent can read the docs, start, check and test apps here."),
+        "",
+        dim("Waiting for your agent on stdin. Ctrl-C to stop."),
+    ]
+    figure = head + [""] + body
+    lines = [f"  {(figure[i] if i < len(figure) else '').ljust(12)}  {words[i] if i < len(words) else ''}".rstrip() for i in range(max(len(figure), len(words)))]
+    return "\n" + "\n".join(lines) + "\n\n"
+
+
 def command(args: list[str]) -> int:
     features: set[str] = set()
     if "--features" in args:
         at = args.index("--features")
         features = set(args[at + 1].split(",")) if at + 1 < len(args) else set()
+    # stdout is the protocol: the banner goes to stderr, and only when a person is watching.
+    if sys.stderr.isatty() and "--quiet" not in args:
+        color = "NO_COLOR" not in os.environ and os.environ.get("TERM") != "dumb"
+        sys.stderr.write(banner(color))
+        sys.stderr.flush()
     serve(read_only="--read-only" in args, features=features)
     return 0

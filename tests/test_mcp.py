@@ -148,3 +148,25 @@ class ModesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Banner(unittest.TestCase):
+    """GAB-194: Tono's banner is for a person at a terminal; stdout stays the protocol."""
+
+    def test_plain_without_colour(self):
+        from ox1audio.mcp import banner
+
+        text = banner(False)
+        self.assertNotIn("\x1b", text)
+        self.assertIn("Tono", text)
+        self.assertIn("▓▓", text)  # the lit square, without colour
+
+    def test_not_on_stdout_when_piped(self):
+        session = Session()
+        try:
+            reply = session.ask("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}})
+            self.assertIn("result", reply)
+        finally:
+            session.process.stdin.close()
+            session.process.wait(timeout=10)
+            self.assertNotIn("Tono", session.process.stderr.read())
