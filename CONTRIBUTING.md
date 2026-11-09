@@ -108,4 +108,4 @@ Everything you contribute is licensed under **Apache-2.0**, the same licence as 
 
 ## The name
 
-The code is open, and the name "Mixel" and its marks are protected so people know what's official. See [TRADEMARKS.md](https://github.com/0x1audio/cloud/blob/main/TRADEMARKS.md).
+The code is open, and the name "Mixel" and its marks are protected so people know what's official. See [TRADEMARKS.md](https://github.com/0x1audio/mixel/blob/main/TRADEMARKS.md).
