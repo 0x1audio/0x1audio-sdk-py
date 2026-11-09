@@ -22,7 +22,7 @@ def convert(files: ox.Files("audio"), format: ox.Choice("wav", "flac", "mp3") = 
     return made                                  # sounds are added to the Library
 ```
 - One decorated function per action. The parameters are the controls; Python defaults are their defaults. Mixel draws the form, checks the input, runs the action in the background, and shows progress and Stop.
-- Controls: `ox.Files("audio" | "midi" | "any", multiple=True)` gives `list[Path]` (one `Path` with `multiple=False`), `ox.Folder()` gives a `Path`, `ox.Choice("a", "b")` a `str`, `ox.Text(placeholder="")`, `ox.Number(min, max, step)`, `ox.Slider(min, max, step)` (`int` if all three are ints), `ox.Range(min, max, step)` → `(low, high)`, `ox.Toggle`. Number, Slider, Range take `unit="dB"`. Plain `str`, `int`, `float`, `bool` work too. Every control takes `label=`. `ox.Folder() | None = None` makes one optional. Save beside an input with `folder or ox.beside(path)` (`None` for a read-only Open with file: copies go to the Library).
+- Controls: `ox.Files("audio" | "midi" | "any", multiple=True)` gives `list[Path]` (one `Path` with `multiple=False`), `ox.Folder()` gives a `Path`, `ox.Choice("a", "b")` a `str`, `ox.Text(placeholder="")`, `ox.Number(min, max, step)`, `ox.Slider(min, max, step)` (`int` if all three are ints), `ox.Range(min, max, step)` → `(low, high)`, `ox.Toggle`. Number, Slider, Range take `unit="dB"`. Plain `str`/`int`/`float`/`bool` work too. Every control takes `label=`. `ox.Folder() | None = None` makes one optional. Save beside an input with `folder or ox.beside(path)` (`None` for a read-only Open with file: copies go to the Library).
 - Return `None`, a `str` (shown to the person), a JSON-able `dict` or `list` (for a page), or `ox.sound(path, title)`, `ox.midi(...)`, `ox.file(...)`, or a list of those. Metadata (`bpm=120, key="A minor"`) follows the title.
 - `ox.progress(fraction, label)`: fraction 0 to 1, or `None` when unknown. Call it often, also from library callbacks. When the person presses Stop it raises `ox.Cancelled` (a `BaseException`, so `except Exception` doesn't catch it): clean up in `except ox.Cancelled:` and re-raise. Every `ox.sound/midi/file` made so far is kept in the Library.
 - A problem the person can fix: `raise ox.Problem("That file has no audio.", hint="Try a WAV or MP3.")`. Other exceptions show "The app ran into a problem"; details go to the log.
@@ -69,12 +69,12 @@ class ConvertTest(unittest.TestCase):
   "accent": "#20b4c4"
 }
 ```
-- Permissions are binding: `files` (Files and Folder controls), `library` (returning sounds), `data` (`ox.data`), `network` as `{"why": "…", "hosts": ["example.com"]}`. Ask only for what the code uses. Each reason is one sentence, 12 to 120 characters, that tells the person why.
-- Optional: `icon` (a square `.svg` or `.png` in the app), `window` (`{"width", "height", "minWidth", "minHeight"}`), `tags` (up to 5), `license` (SPDX), `page` (below).
+- Permissions are binding: `files` (Files and Folder controls), `library` (returning sounds), `data` (`ox.data`), `gpu` (torch, onnxruntime), `network` as `{"why": "…", "hosts": ["example.com"]}`. Ask only for what the code uses. Each reason is one sentence (12–120 characters) telling the person why.
+- Optional: `icon` (a square `.svg`/`.png` in the app), `window` (`{"width", "height", "minWidth", "minHeight"}`), `tags` (up to 5), `license` (SPDX), `page` (below).
 - Raise `version` before each release. Never change `name`.
 
 ## Dependencies
-Python packages go in `pyproject.toml` › `[project].dependencies`, wheels only; Mixel installs only those (`mixel check --fix` adds what the code imports, then runs `uv sync`; commit uv.lock). numpy and scipy are fine. The SDK already has ffmpeg; don't add ffmpeg wrappers, pydub, or requests. Never commit models, songs, or files over 5 MB (a short test tone is fine).
+Python packages go in `pyproject.toml` › `[project].dependencies`, wheels only; Mixel installs only those (`mixel check --fix` adds what the code imports, then runs `uv sync`; commit uv.lock). numpy and scipy are fine. The SDK already has ffmpeg; don't add ffmpeg wrappers, pydub, or requests. Never commit models, songs or files over 5 MB.
 
 ## A page (only when the drawn form is not enough)
 `mixel new --page` adds one: Vite + React, built to `dist/index.html`. It uses `@0x1audio/design-system` and the same actions:

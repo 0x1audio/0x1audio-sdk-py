@@ -125,6 +125,10 @@ def _run(folder: Path) -> Report:
             for item in loaded:
                 used |= item.permissions()
             used |= _static_permissions(folder)
+            # gpu is optional (the same code runs on the CPU), so the code never needs it declared;
+            # declared, it counts as used when the app runs models with torch or onnxruntime.
+            if "gpu" in manifest.permissions and _runs_models(folder):
+                used.add("gpu")
             page = _page_permissions(folder) - used
             used |= page
             if safety.network:
@@ -486,4 +490,18 @@ def _why_used(code: str) -> str:
 
 
 def _reason(code: str) -> str:
-    return {"files": "Open the songs you choose.", "library": "Save the results to your Library.", "data": "Remember your settings on this computer."}.get(code, "Why the app needs it.")
+    return {"files": "Open the songs you choose.", "library": "Save the results to your Library.", "data": "Remember your settings on this computer.", "gpu": "Use your graphics chip to split songs faster."}.get(code, "Why the app needs it.")
+
+
+_models = re.compile(r"^\s*(import|from)\s+(torch|onnxruntime)\b", re.M)
+
+
+def _runs_models(folder: Path) -> bool:
+    """The app imports torch or onnxruntime, the libraries that can use the graphics chip."""
+    for path in _sources(folder, {".py"}, _skip | {".git"}):
+        parts = set(path.relative_to(folder).parts)
+        if parts & {".venv", "tests", "node_modules", "dist", "__pycache__"}:
+            continue
+        if _models.search(path.read_text(errors="replace")):
+            return True
+    return False

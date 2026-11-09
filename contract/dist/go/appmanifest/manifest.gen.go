@@ -17,7 +17,7 @@ const Schema = "https://0x1audio.com/schema/app/v1.json"
 const DocsURL = "https://docs.0x1audio.com/errors#"
 
 var Fields = []string{"$schema", "name", "displayName", "summary", "version", "sdk", "entry", "page", "permissions", "accent", "icon", "window", "tags", "license"}
-var PermissionCodes = []string{"files", "library", "data", "network"}
+var PermissionCodes = []string{"files", "library", "data", "gpu", "network"}
 
 var (
 	namePattern    = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)

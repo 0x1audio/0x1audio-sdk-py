@@ -15,6 +15,11 @@
     "uses": "ox.data in Python and on the page",
     "short": "`ox.data`"
   },
+  "gpu": {
+    "text": "Use the graphics chip",
+    "uses": "torch or onnxruntime running a model on the graphics chip (Metal on a Mac, CUDA on Linux); without it, the same code runs on the CPU",
+    "short": "torch, onnxruntime"
+  },
   "network": {
     "text": "Use the network",
     "uses": "reaching the listed hosts only (downloads, page fetch)",

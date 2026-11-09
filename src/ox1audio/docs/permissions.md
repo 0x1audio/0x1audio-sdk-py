@@ -7,6 +7,7 @@ An app asks only for what its code uses, each with one sentence that says why. D
 | `files` | Read and write files you pick | Files and Folder controls; files next to the ones chosen |
 | `library` | Add to your Library | returning ox.sound, ox.midi or ox.file; ox.library.add; the page's ox.library |
 | `data` | Keep its own files | ox.data in Python and on the page |
+| `gpu` | Use the graphics chip | torch or onnxruntime running a model on the graphics chip (Metal on a Mac, CUDA on Linux); without it, the same code runs on the CPU |
 | `network` | Use the network | reaching the listed hosts only (downloads, page fetch) |
 
 `network` is `{"why": "…", "hosts": ["example.com"]}`. The whole web, IPs and localhost are refused.

@@ -98,6 +98,21 @@ class CheckTest(Scratch):
         self.assertIn("Fixed  permissions.library added", done.stdout)
         self.assertIn("library", json.loads((app / "app.json").read_text())["permissions"])
 
+    def test_gpu_is_optional_and_unused_without_a_model_library(self):
+        # GAB-141: gpu lets torch or onnxruntime use the graphics chip; the same code runs on the CPU without it.
+        app = self.new_app()
+        data = json.loads((app / "app.json").read_text())
+        data["permissions"]["gpu"] = "Use your graphics chip to split songs faster."
+        (app / "app.json").write_text(json.dumps(data))
+        codes = lambda: [(item["code"], item["where"]) for item in json.loads(mixel("check", "--json", cwd=app).stdout)["warnings"]]  # noqa: E731
+        self.assertIn(("permission_unused", "app.json › permissions.gpu"), codes())
+        (app / "engine.py").write_text("import onnxruntime\n")
+        self.assertNotIn(("permission_unused", "app.json › permissions.gpu"), codes())
+        del data["permissions"]["gpu"]
+        (app / "app.json").write_text(json.dumps(data))
+        report = json.loads(mixel("check", "--json", cwd=app).stdout)
+        self.assertNotIn("permissions.gpu", json.dumps(report), "a model library never makes gpu required")
+
     def test_strict_fails_on_warnings(self):
         app = self.new_app()
         data = json.loads((app / "app.json").read_text())

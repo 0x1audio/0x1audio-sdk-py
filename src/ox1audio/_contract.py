@@ -5,8 +5,8 @@ The app.json rules, permission codes, protocol version and error codes, in one p
 SCHEMA = "https://0x1audio.com/schema/app/v1.json"
 FIELDS = ["$schema", "name", "displayName", "summary", "version", "sdk", "entry", "page", "permissions", "accent", "icon", "window", "tags", "license"]
 REQUIRED = ["$schema", "name", "displayName", "version", "sdk"]
-PERMISSIONS = ["files", "library", "data", "network"]
-PERMISSION_TEXT = {"files": "Read and write files you pick", "library": "Add to your Library", "data": "Keep its own files", "network": "Use the network"}
+PERMISSIONS = ["files", "library", "data", "gpu", "network"]
+PERMISSION_TEXT = {"files": "Read and write files you pick", "library": "Add to your Library", "data": "Keep its own files", "gpu": "Use the graphics chip", "network": "Use the network"}
 NAME_PATTERN = "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
 NAME_LENGTH = [2, 48]
 DISPLAY_NAME_MAX = 48

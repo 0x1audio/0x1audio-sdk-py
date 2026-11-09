@@ -87,6 +87,10 @@
           "$ref": "#/$defs/reason",
           "description": "Keep the app's own files on this computer (ox.data)."
         },
+        "gpu": {
+          "$ref": "#/$defs/reason",
+          "description": "Use this computer's graphics chip (Metal on a Mac, CUDA on Linux) to run models faster. Without it, models run on the CPU."
+        },
         "network": {
           "type": "object",
           "additionalProperties": false,
