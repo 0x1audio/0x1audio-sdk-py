@@ -58,7 +58,7 @@ class ActionTest(unittest.TestCase):
         def defaults(format: ox.Choice("wav", "mp3"), gain: ox.Slider(-6, 6), note: ox.Text(), loud: ox.Toggle, take: int = 3):
             return {"format": format, "gain": gain, "note": note, "loud": loud, "take": take}
 
-        self.assertEqual(ox.test(defaults)["result"], {"format": "wav", "gain": -6.0, "note": "", "loud": False, "take": 3})
+        self.assertEqual(ox.test(defaults)["result"], {"format": "wav", "gain": 0, "note": "", "loud": False, "take": 3})  # -6…6 starts at its origin, 0 (GAB-86)
 
     def test_input_is_checked_and_the_message_says_what_to_do(self):
         @ox.action("Louder")

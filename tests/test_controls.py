@@ -30,6 +30,34 @@ class UnitAndRangeTest(unittest.TestCase):
                 ox.Slider(0, 1, unit=bad)
             self.assertIn('fix:  write it like unit="dB"', str(caught.exception))
 
+    def test_a_slider_across_zero_fills_from_zero(self):
+        # GAB-86: a pitch slider at "0 semitones" must not look half applied.
+        @ox.action("Shift")
+        def shift(
+            pitch: ox.Slider(-12, 12, step=0.5, unit="semitones"),
+            gain: ox.Slider(-60, 6, step=1, unit="dB", origin=-60),
+            mix: ox.Slider(0, 100, step=1, unit="%", origin=50),
+            amount: ox.Slider(0, 1),
+        ):
+            return pitch, mix
+
+        act = find(shift)
+        props = act.spec()["input"]["properties"]
+        self.assertEqual(props["pitch"]["x-ox"], {"control": "slider", "step": 0.5, "unit": "semitones", "origin": 0})
+        self.assertEqual(props["pitch"]["default"], 0)
+        self.assertNotIn("origin", props["gain"]["x-ox"])
+        self.assertEqual(props["gain"]["default"], -60)
+        self.assertEqual(props["mix"]["x-ox"]["origin"], 50)
+        self.assertEqual(props["mix"]["default"], 50)
+        self.assertNotIn("origin", props["amount"]["x-ox"])
+        self.assertEqual(ox.test(shift)["result"], [0, 50])
+
+    def test_an_origin_is_inside_the_slider(self):
+        for bad in (13, "0", True):
+            with self.assertRaises(ValueError) as caught:
+                ox.Slider(-12, 12, origin=bad)
+            self.assertIn("fix:  write it like ox.Slider(-12, 12, origin=0)", str(caught.exception))
+
     def test_a_range_is_two_numbers_on_one_slider(self):
         @ox.action("Band")
         def band(part: ox.Range(0, 1), hz: ox.Range(20, 20000, step=1, unit="Hz") = (200, 4000)):

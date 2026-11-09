@@ -24,6 +24,9 @@ export interface ControlHint {
   step?: number
   // Shown after the value, like "dB", "Hz" or "%".
   unit?: string
+  // A slider's "no change" value when it isn't the minimum (0 on a -12…12 slider):
+  // the track fills from here to the value, with a mark at the origin.
+  origin?: number
 }
 
 export interface PropertySchema {

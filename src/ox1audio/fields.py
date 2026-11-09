@@ -165,18 +165,29 @@ class Number(Field):
 
 
 class Slider(Number):
-    """A number on a slider. Starts at ``min`` unless the parameter has a default.
+    """A number on a slider. Starts at its origin unless the parameter has a default.
 
     Whole numbers (an ``int``) when min, max and step are all ints: ``ox.Slider(1, 8, step=1)``.
+
+    ``origin`` is the value that means "no change": the track fills from it to the value, and
+    a mark shows where it is. It is 0 when the slider runs from below zero to above it
+    (``ox.Slider(-12, 12, step=0.5, unit="semitones")`` fills from the centre), else ``min``.
     """
 
     control = "slider"
 
-    def __init__(self, min: float = 0, max: float = 1, step: float = 0.01, label: str | None = None, *, unit: str | None = None) -> None:
+    def __init__(self, min: float = 0, max: float = 1, step: float = 0.01, label: str | None = None, *, unit: str | None = None, origin: float | None = None) -> None:
         super().__init__(min, max, step, label, unit=unit)
+        self.origin = _check_origin("ox.Slider", min, max, origin)
+
+    def schema(self) -> dict:
+        spec = super().schema()
+        if self.origin != self.min:
+            spec["x-ox"]["origin"] = self.origin
+        return spec
 
     def natural_default(self) -> object:
-        return self.min
+        return self.origin
 
 
 class Range(Field):
@@ -238,6 +249,14 @@ def _check_range(name: str, low: float | None, high: float | None, step: float |
         raise ValueError(f"{name}({low}, {high}): min is larger than max.\nfix:  swap them.\ndocs: https://docs.0x1audio.com/actions#controls")
     if step is not None and step <= 0:
         raise ValueError(f"{name}(step={step}): the step is above zero.\nfix:  use a step like 1 or 0.5.\ndocs: https://docs.0x1audio.com/actions#controls")
+
+
+def _check_origin(name: str, low: float, high: float, origin: object) -> float:
+    if origin is None:
+        return 0 if low < 0 < high else low
+    if isinstance(origin, bool) or not isinstance(origin, (int, float)) or not low <= origin <= high:
+        raise ValueError(f"{name}({low}, {high}, origin={origin!r}): the origin is a number from min to max, the value that means no change.\nfix:  write it like {name}(-12, 12, origin=0).\ndocs: https://docs.0x1audio.com/actions#controls")
+    return origin
 
 
 def _check_unit(name: str, unit: object) -> str | None:

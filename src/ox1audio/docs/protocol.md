@@ -27,7 +27,7 @@ Protocol 1 between the desktop and an app's Python worker: NDJSON on stdin and s
 
 ## Types
 
-- `ActionSpec` = `{name, title, input: JSON Schema object whose properties carry "x-ox": {control, accept?, multiple?, label?, placeholder?, step?, unit?}, timeout: seconds}. A slider on an array of 2 numbers is a range: [start, end].`
+- `ActionSpec` = `{name, title, input: JSON Schema object whose properties carry "x-ox": {control, accept?, multiple?, label?, placeholder?, step?, unit?, origin?}, timeout: seconds}. A slider on an array of 2 numbers is a range: [start, end]. origin is a slider's no-change value when it isn't the minimum: the track fills from it.`
 - `Error` = `{code, message, hint?, detail?, kept?: [Item]}`
 - `Item` = `{id, kind: sound | midi | other, title, path}`
 
