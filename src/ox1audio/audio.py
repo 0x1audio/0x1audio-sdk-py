@@ -240,9 +240,12 @@ def convert(
     # whole file brings its true peak to -1 dBTP, and the result says so. Never a limiter.
     lowered = 0.0
     if source.float and not (fmt.lossless and "pcm_f32" in codec[-1]):
-        peak = _true_peak(source.path)
-        if peak is not None and peak > 0.0:
-            lowered = round(peak + 1.0, 1)
+        sample, true = _peaks(source.path)
+        # An integer file holds full scale exactly, so only samples over it count; a lossy decoder
+        # overshoots between samples, so there the true peak counts.
+        over = sample if fmt.lossless else true
+        if over is not None and true is not None and over > 0.0:
+            lowered = round(true + 1.0, 1)
     level = f"volume=-{lowered}dB" if lowered else None
     dither = ",".join(item for item in (level, dither) if item) or None
     args = [ffmpeg(), "-hide_banner", "-nostdin", "-y", "-i", source.path, "-map", "0:a:0"]
@@ -274,16 +277,16 @@ def convert(
     return result
 
 
-def _true_peak(path: str) -> float | None:
-    """The file's true peak in dBFS (4x oversampled, EBU R 128), read as ffmpeg streams it."""
+def _peaks(path: str) -> tuple[float | None, float | None]:
+    """The file's sample peak and true peak (4x oversampled, EBU R 128) in dBFS, in one streamed pass."""
     done = subprocess.run(
-        [ffmpeg(), "-hide_banner", "-nostdin", "-i", path, "-map", "0:a:0", "-af", "ebur128=peak=true:framelog=quiet", "-f", "null", "-"],
+        [ffmpeg(), "-hide_banner", "-nostdin", "-i", path, "-map", "0:a:0", "-af", "astats=measure_perchannel=none:measure_overall=Peak_level,ebur128=peak=true:framelog=quiet", "-f", "null", "-"],
         capture_output=True, text=True, errors="replace", timeout=3600,
     )
-    found = re.search(r"True peak:\s+Peak:\s+(-?[\d.]+|-inf) dBFS", done.stderr)
-    if not found or found.group(1) == "-inf":
-        return None
-    return float(found.group(1))
+    sample = re.search(r"Peak level dB:\s+(-?[\d.]+|-inf)", done.stderr)
+    true = re.search(r"True peak:\s+Peak:\s+(-?[\d.]+|-inf) dBFS", done.stderr)
+    read = lambda found: None if not found or found.group(1) == "-inf" else float(found.group(1))  # noqa: E731
+    return read(sample), read(true)
 
 
 def _bitrate(fmt: Format, channels: int) -> int:
@@ -454,6 +457,10 @@ def write(samples, rate: int, format_id: str = "wav", folder: str | Path | None 
         raise ValueError(_teach("ox.audio.write: the samples have NaN or infinite values.", "find the division by zero or the empty mean that made them", "audio#levels"))
     floating = fmt.lossless and bits == 32
     peak = float(np.max(np.abs(data))) if data.size else 0.0
+    kind = getattr(samples, "dtype", None)
+    if kind is not None and np.issubdtype(kind, np.integer) and data.size:
+        # An integer array is integer PCM whatever its peak: 1 in int16 is not full scale.
+        _refuse_over(np, samples, peak, "")
     if peak > 1.0 and not floating:
         _refuse_over(np, samples, peak, f"{bits or 24}-bit {fmt.label}" if fmt.lossless else fmt.label)
     _check_channels(fmt, data.shape[1], name)
@@ -502,11 +509,17 @@ def _refuse_over(np, samples, peak: float, what: str) -> None:
     from ox1audio.action import _teach
 
     kind = getattr(samples, "dtype", None)
-    if (kind is not None and np.issubdtype(kind, np.integer)) or peak > 64:
+    integer = kind is not None and np.issubdtype(kind, np.integer)
+    if integer or peak > 64:
         # scipy.io.wavfile and soundfile(dtype="int16") give integers: 32767 is full scale, not 1.0.
-        bits = 16 if peak <= 32768 else 24 if peak <= 8388608 else 32
+        # The dtype says the full scale; only a float array's peak is a guess.
+        if integer:
+            bits = min(32, np.iinfo(kind).bits)
+        else:
+            bits = 16 if peak <= 32768 else 24 if peak <= 8388608 else 32
+        what = f"are {kind} integers" if integer else f"look like {bits}-bit integers (peak {peak:.0f})"
         raise ValueError(_teach(
-            f"ox.audio.write: the samples look like {bits}-bit integers (peak {peak:.0f}), but write takes floats from -1 to 1.",
+            f"ox.audio.write: the samples {what}, but write takes floats from -1 to 1.",
             f"divide them by {2 ** (bits - 1)} (samples / {2 ** (bits - 1)}), or read the file with ox.audio.read, which gives floats",
             "audio#levels",
         ))

@@ -107,12 +107,21 @@ class OutputTest(unittest.TestCase):
             with self.assertRaises(ValueError) as caught:
                 ox.audio.write(samples, RATE, "wav", self.folder)
             message = str(caught.exception)
-            self.assertIn("look like 16-bit integers", message)
+            self.assertIn("int16 integers" if samples.dtype == np.int16 else "look like 16-bit integers", message)
             self.assertIn("fix:  divide them by 32768 (samples / 32768), or read the file with ox.audio.read", message)
             self.assertNotIn("* 0.0", message)
         as_int32 = (sine(-1, 0.1) * 2147483647).astype(np.int32)
         with self.assertRaisesRegex(ValueError, "divide them by 2147483648"):
             ox.audio.write(as_int32, RATE, "wav", self.folder)
+        # The dtype decides, not the peak: quiet int32 (24-bit audio, left-justified) still divides
+        # by 2^31, and an int array peaking at 1 is integer PCM, not a full-scale square.
+        quiet32 = (sine(-60, 0.1) * 2147483647).astype(np.int32)
+        with self.assertRaisesRegex(ValueError, r"int32 integers[\s\S]*divide them by 2147483648"):
+            ox.audio.write(quiet32, RATE, "wav", self.folder)
+        for tiny in (np.array([[1], [-1], [0]], dtype=np.int16), np.ones((10, 2), dtype=np.int64)):
+            with self.assertRaisesRegex(ValueError, "integers, but write takes floats"):
+                ox.audio.write(tiny, RATE, "wav", self.folder)
+        self.assertEqual(list(self.folder.iterdir()), [], "no square wave written")
         for peak in (1.01, 3.0, 40.0, 64.0):
             with self.assertRaises(ValueError) as caught:
                 ox.audio.write(sine(0, 0.05) * peak, RATE, "wav", self.folder)
@@ -141,6 +150,10 @@ class OutputTest(unittest.TestCase):
         self.assertEqual((kept.lowered_db, kept.note), (0.0, ""), "float to float WAV keeps the overs")
         quiet = ox.audio.write(sine(-6, 0.1), RATE, "wav", self.folder, "quiet", bits=32)
         self.assertEqual(ox.audio.convert(quiet, "flac", self.folder).lowered_db, 0.0, "under 0 dBFS: untouched")
+        # Exactly full scale fits an integer file: no cut for 24-bit WAV, though its true peak is a touch over.
+        full = ox.audio.write(np.array([[1.0], [1.0], [-1.0], [-1.0]] * 4000, dtype=np.float32), RATE, "wav", self.folder, "full", bits=32)  # +3 dBTP
+        self.assertEqual(ox.audio.convert(full, "wav", self.folder, bits=24).lowered_db, 0.0, "full scale is not over")
+        self.assertGreater(ox.audio.convert(full, "mp3", self.folder).lowered_db, 0.0, "a lossy copy still gets the true-peak cut")
 
     def test_full_scale_is_not_an_over(self):
         ox.audio.write(np.array([[1.0], [-1.0], [0.5]], dtype=np.float32), RATE, "wav", self.folder)
