@@ -53,7 +53,8 @@ def read(path: Path) -> Extras:
             extras.loops = [(int(start), int(start + length) - 1)]
         elif end:
             extras.loops = [(int(start), int(end) - 1)]
-    head = path.read_bytes()[:12]
+    with path.open("rb") as handle:
+        head = handle.read(12)
     if head[:4] == b"RIFF" and head[8:12] == b"WAVE":
         _read_wav(path, extras)
     elif head[:4] == b"FORM" and head[8:12] in (b"AIFF", b"AIFC"):
@@ -126,19 +127,31 @@ def _metadata(report: str) -> dict[str, str]:
 
 
 
-def _chunks(data: bytes, start: int, big: bool):
-    at = start
+# Only these small chunks are read into memory; the audio itself (data, SSND) is skipped by seeking,
+# so a file of any size is read in constant memory.
+_WANTED = {b"smpl", b"cue ", b"acid", b"MARK", b"INST"}
+_MAX_CHUNK = 1 << 20
+
+
+def _chunks(path: Path, big: bool):
     order = ">I" if big else "<I"
-    while at + 8 <= len(data):
-        cid = data[at : at + 4]
-        size = struct.unpack(order, data[at + 4 : at + 8])[0]
-        yield cid, data[at + 8 : at + 8 + size]
-        at += 8 + size + (size & 1)
+    with path.open("rb") as handle:
+        total = handle.seek(0, 2)
+        at = 12
+        while at + 8 <= total:
+            handle.seek(at)
+            header = handle.read(8)
+            if len(header) < 8:
+                return
+            cid = header[:4]
+            size = struct.unpack(order, header[4:8])[0]
+            if cid in _WANTED and size <= _MAX_CHUNK:
+                yield cid, handle.read(size)
+            at += 8 + size + (size & 1)
 
 
 def _read_wav(path: Path, extras: Extras) -> None:
-    data = path.read_bytes()
-    for cid, body in _chunks(data, 12, big=False):
+    for cid, body in _chunks(path, big=False):
         if cid == b"smpl" and len(body) >= 36:
             count = struct.unpack("<I", body[28:32])[0]
             loops = []
@@ -163,10 +176,9 @@ def _read_wav(path: Path, extras: Extras) -> None:
 
 
 def _read_aiff(path: Path, extras: Extras) -> None:
-    data = path.read_bytes()
     markers: dict[int, int] = {}
     sustain = None
-    for cid, body in _chunks(data, 12, big=True):
+    for cid, body in _chunks(path, big=True):
         if cid == b"MARK" and len(body) >= 2:
             at = 2
             for _ in range(struct.unpack(">H", body[:2])[0]):
@@ -184,12 +196,23 @@ def _read_aiff(path: Path, extras: Extras) -> None:
 
 
 def _mp4_tempo(path: Path) -> float | None:
-    data = path.read_bytes()
-    at = data.find(b"tmpo")
-    if at < 0 or data[at + 8 : at + 12] != b"data" or at + 22 > len(data):
-        return None
-    tempo = struct.unpack(">H", data[at + 20 : at + 22])[0]
-    return float(tempo) if tempo else None
+    """The iTunes tmpo atom, found by reading the file 1 MB at a time."""
+    block = 1 << 20
+    with path.open("rb") as handle:
+        carry = b""
+        while True:
+            data = handle.read(block)
+            if not data:
+                return None
+            window = carry + data
+            at = window.find(b"tmpo")
+            if at >= 0:
+                window += handle.read(32)
+                if window[at + 8 : at + 12] != b"data" or at + 22 > len(window):
+                    return None
+                tempo = struct.unpack(">H", window[at + 20 : at + 22])[0]
+                return float(tempo) if tempo else None
+            carry = window[-8:]
 
 
 # --- writing ----------------------------------------------------------------------------------
@@ -230,14 +253,20 @@ def _finish_wav(target: Path, extras: Extras) -> None:
 
 
 def _append(target: Path, chunks: list[tuple[bytes, bytes]], big: bool) -> None:
+    """Add chunks at the end of a RIFF or FORM file in place, and fix its size: constant memory."""
     order = ">I" if big else "<I"
-    data = bytearray(target.read_bytes())
-    if len(data) & 1:
-        data += b"\0"
-    for cid, body in chunks:
-        data += cid + struct.pack(order, len(body)) + body + (b"\0" if len(body) & 1 else b"")
-    data[4:8] = struct.pack(order, len(data) - 8)
-    target.write_bytes(bytes(data))
+    with target.open("r+b") as handle:
+        end = handle.seek(0, 2)
+        if end & 1:
+            handle.write(b"\0")
+            end += 1
+        for cid, body in chunks:
+            handle.write(cid + struct.pack(order, len(body)) + body + (b"\0" if len(body) & 1 else b""))
+        end = handle.tell()
+        if end - 8 > 0xFFFFFFFF:
+            return  # past what a RIFF size can say: leave the header as ffmpeg wrote it
+        handle.seek(4)
+        handle.write(struct.pack(order, end - 8))
 
 
 def _marker(mid: int, position: int, name: str) -> bytes:

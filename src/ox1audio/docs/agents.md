@@ -46,8 +46,8 @@ class ConvertTest(unittest.TestCase):
 | Need | Use |
 | --- | --- |
 | File info | `ox.audio.probe(path)` → `.rate .channels .duration .codec` |
-| Another format | `ox.audio.convert(path, "wav" / "aiff" / "flac" / "mp3" / "aac" / "ogg" / "opus", folder=None, bits=None)` → `Path` (keeps depth, tags, cover, loops) |
-| Samples (numpy) | `ox.audio.read(path)` → `(samples, rate)`, float32 shaped `(frames, channels)`; `ox.audio.write(samples, rate, "wav", folder=None, name="audio", bits=24)` → `Path`. `bits=32` is float; 16 dithers. Over ±1 raises: lower the gain, or use float. |
+| Another format | `ox.audio.convert(path, "wav" / "aiff" / "flac" / "mp3" / "aac" / "ogg" / "opus", folder=None, bits=None)` → `Path` (keeps depth, tags, cover, loops; `.note` if it lowered an over) |
+| Samples (numpy) | `ox.audio.read(path)` → `(samples, rate)`, float32 `(frames, channels)`; `ox.audio.write(samples, rate, "wav", folder=None, name="audio", bits=24)` → `Path`. `bits=32`: float; 16 dithers. Over ±1 raises, with the fix. |
 | A folder for new files | `ox.temp()` → an empty folder, removed when the app closes |
 | The app's own files | `ox.data.read / read_text / write / list / remove("presets/a.json")` (needs `data`) |
 

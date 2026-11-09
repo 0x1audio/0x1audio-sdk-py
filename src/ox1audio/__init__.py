@@ -9,7 +9,7 @@
 The whole public API is ``__all__`` below. AGENTS.md in every app explains it.
 """
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 from ox1audio.action import Cancelled, Problem, action, beside, emit, progress, temp, test
 from ox1audio.app import run

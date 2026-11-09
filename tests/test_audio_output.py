@@ -95,8 +95,52 @@ class OutputTest(unittest.TestCase):
                 ox.audio.write(loud, RATE, target, self.folder, bits=bits)
             message = str(caught.exception)
             self.assertIn("+5.1 dBFS", message)
-            self.assertIn("fix:  lower the gain (samples * 0.55), or write \"wav\" with bits=32", message)
+            self.assertIn("fix:  lower the gain by 5.2 dB (samples * 0.549), or write \"wav\" with bits=32", message)
         self.assertEqual(list(self.folder.iterdir()), [], "nothing half written")
+        # Following the fix line works: the suggested gain writes.
+        ox.audio.write(loud * 0.549, RATE, "wav", self.folder)
+
+    def test_integer_samples_are_named_as_such_never_a_zero_gain(self):
+        # The most common mistake: int16 from scipy.io.wavfile. "samples * 0.0" would write silence.
+        as_int16 = (sine(-1, 0.1) * 32767).astype(np.int16)
+        for samples in (as_int16, as_int16.astype(np.float32)):
+            with self.assertRaises(ValueError) as caught:
+                ox.audio.write(samples, RATE, "wav", self.folder)
+            message = str(caught.exception)
+            self.assertIn("look like 16-bit integers", message)
+            self.assertIn("fix:  divide them by 32768 (samples / 32768), or read the file with ox.audio.read", message)
+            self.assertNotIn("* 0.0", message)
+        as_int32 = (sine(-1, 0.1) * 2147483647).astype(np.int32)
+        with self.assertRaisesRegex(ValueError, "divide them by 2147483648"):
+            ox.audio.write(as_int32, RATE, "wav", self.folder)
+        for peak in (1.01, 3.0, 40.0, 64.0):
+            with self.assertRaises(ValueError) as caught:
+                ox.audio.write(sine(0, 0.05) * peak, RATE, "wav", self.folder)
+            gain = float(str(caught.exception).split("(samples * ")[1].split(")")[0])
+            self.assertGreater(gain, 0)
+            self.assertLessEqual(peak * gain, 1.0)
+
+    def test_convert_turns_a_float_source_over_0_dbfs_down_once_and_says_so(self):
+        # Founder decision 1: one gain cut to -1 dBTP, reported. Never a limiter.
+        loud = self.folder / "loud.wav"
+        subprocess.run([ffmpeg(), "-v", "error", "-y", "-f", "f32le", "-ar", str(RATE), "-ac", "2", "-i", "-", "-c:a", "pcm_f32le", str(loud)], input=(sine(0, 0.5, channels=2) * 2.0).tobytes(), check=True)
+        source, _ = ox.audio.read(loud)
+        for target in ("flac", "wav", "mp3"):
+            bits = 24 if target == "wav" else None
+            out = ox.audio.convert(loud, target, self.folder, bits=bits)
+            self.assertIsInstance(out, Path)
+            self.assertAlmostEqual(out.lowered_db, 7.0, delta=0.15, msg=target)  # +6.0 dBTP to -1
+            self.assertEqual(out.note, f"Lowered {out.lowered_db:g} dB so it doesn't clip.")
+            back, _ = ox.audio.read(out)
+            if target != "mp3":
+                # Gain only: the copy is the source times one number, to within dither.
+                scale = 10 ** (-out.lowered_db / 20)
+                self.assertLess(float(np.max(np.abs(back - source[: len(back)] * scale))), 1e-4, target)
+            self.assertLess(float(np.max(np.abs(back))), 1.0, target)
+        kept = ox.audio.convert(loud, "wav", self.folder)
+        self.assertEqual((kept.lowered_db, kept.note), (0.0, ""), "float to float WAV keeps the overs")
+        quiet = ox.audio.write(sine(-6, 0.1), RATE, "wav", self.folder, "quiet", bits=32)
+        self.assertEqual(ox.audio.convert(quiet, "flac", self.folder).lowered_db, 0.0, "under 0 dBFS: untouched")
 
     def test_full_scale_is_not_an_over(self):
         ox.audio.write(np.array([[1.0], [-1.0], [0.5]], dtype=np.float32), RATE, "wav", self.folder)
@@ -164,6 +208,47 @@ class OutputTest(unittest.TestCase):
         back, _ = ox.audio.read(copy)
         source, _ = ox.audio.read(kit)
         self.assertTrue(np.array_equal(back, source), "the samples null")
+
+    def test_tags_of_a_big_file_are_read_and_written_in_constant_memory(self):
+        # An 864 MB WAV once peaked at 1.7 GB: chunks are read by seeking, and appended in place.
+        big = self.folder / "big.wav"
+        frames = 100_000_000 // 6  # about 100 MB of 24-bit stereo, zeros (sparse on disk)
+        size = frames * 6
+        header = b"RIFF" + struct.pack("<I", 36 + 8 + size) + b"WAVE" + b"fmt " + struct.pack("<IHHIIHH", 16, 1, 2, RATE, RATE * 6, 6, 24) + b"data" + struct.pack("<I", size)
+        with big.open("wb") as handle:
+            handle.write(header)
+            handle.truncate(len(header) + size)
+        smpl = struct.pack("<9I", 0, 0, int(1e9 / RATE), 60, 0, 0, 0, 1, 0) + struct.pack("<6I", 0, 0, 10, 20, 0, 0)
+        code = (
+            "import resource, sys\n"
+            "from pathlib import Path\n"
+            "from ox1audio import _tags\n"
+            "big = Path(sys.argv[1])\n"
+            "before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss\n"
+            f"_tags._append(big, [(b'smpl', {smpl!r})], big=False)\n"
+            "found = _tags.read(big)\n"
+            "assert found.loops == [(10, 20)], found.loops\n"
+            "print(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - before)\n"
+        )
+        import sys
+
+        done = subprocess.run([sys.executable, "-c", code, str(big)], capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertLess(int(done.stdout.strip()), 20_000, "KB of extra memory for a 100 MB file")
+        self.assertEqual(struct.unpack("<I", big.read_bytes()[4:8])[0], big.stat().st_size - 8, "RIFF size fixed")
+
+    def test_too_many_channels_for_a_format_says_which_to_choose(self):
+        ten = self.folder / "ten.wav"
+        self.ff("-f", "lavfi", "-i", "sine=f=440:d=0.2:r=48000", "-af", "pan=10c|c0=c0", "-c:a", "pcm_s24le", str(ten))
+        for target in ("flac", "aac", "ogg"):
+            with self.assertRaises(ox.Problem) as caught:
+                ox.audio.convert(ten, target, self.folder)
+            self.assertIn("ten.wav has 10 channels", caught.exception.message)
+            self.assertEqual(caught.exception.hint, "Choose WAV or AIFF, which hold every channel.")
+        self.assertEqual(ox.audio.probe(ox.audio.convert(ten, "wav", self.folder)).channels, 10)
+        seven = self.folder / "seven.wav"
+        self.ff("-f", "lavfi", "-i", "sine=f=440:d=0.2:r=48000", "-af", "pan=6.1|c0=c0", "-c:a", "pcm_s24le", str(seven))
+        self.assertEqual(ox.audio.probe(ox.audio.convert(seven, "ogg", self.folder)).channels, 7, "Ogg 6.1 gets a bitrate it can encode")
 
     # GAB-135 --------------------------------------------------------------------------------
 

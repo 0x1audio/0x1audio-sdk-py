@@ -42,7 +42,10 @@ class Format:
     muxer: str
     bitrates: tuple[int, ...] = ()
     rates: tuple[int, ...] = ()
+    # Mixed down to this many channels (MP3 and Opus hold two).
     max_channels: int | None = None
+    # More channels than this is refused with a message: FLAC, AAC and Ogg hold eight.
+    channel_limit: int | None = None
     extra: tuple[str, ...] = ()
 
 
@@ -51,14 +54,25 @@ _mp3_rates = (8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000)
 FORMATS: tuple[Format, ...] = (
     Format("wav", "WAV", "wav", "pcm_s24le", True, "wav"),
     Format("aiff", "AIFF", "aiff", "pcm_s24be", True, "aiff"),
-    Format("flac", "FLAC", "flac", "flac", True, "flac"),
+    Format("flac", "FLAC", "flac", "flac", True, "flac", channel_limit=8),
     Format("mp3", "MP3", "mp3", "libmp3lame", False, "mp3", bitrates=(320,), rates=_mp3_rates, max_channels=2, extra=("-id3v2_version", "3")),
-    Format("aac", "AAC", "m4a", "aac", False, "ipod", bitrates=(256,), extra=("-movflags", "+faststart")),
-    Format("ogg", "Ogg Vorbis", "ogg", "libvorbis", False, "ogg", bitrates=(192,)),
+    Format("aac", "AAC", "m4a", "aac", False, "ipod", bitrates=(256,), channel_limit=8, extra=("-movflags", "+faststart")),
+    Format("ogg", "Ogg Vorbis", "ogg", "libvorbis", False, "ogg", bitrates=(192,), channel_limit=8),
     Format("opus", "Opus", "opus", "libopus", False, "opus", bitrates=(128,), rates=(48000,), max_channels=2),
 )
 
 _by_id = {item.id: item for item in FORMATS}
+
+
+class Converted(type(Path())):
+    """The new file from ``convert``: a ``Path``, plus what convert had to change.
+
+    ``lowered_db`` is how far a float source over 0 dBFS was turned down so the copy doesn't clip
+    (0.0 when it wasn't), and ``note`` says so in words the app can show ("" when it wasn't).
+    """
+
+    lowered_db: float = 0.0
+    note: str = ""
 
 
 @functools.cache
@@ -212,6 +226,7 @@ def convert(
     _check_float(fmt, bits, "convert")
     out = Path(folder) if folder else _temp()
     target = _unused(out / f"{Path(source.name).stem}.{fmt.ext}")
+    _check_channels(fmt, source.channels, source.name)
     channels = source.channels if fmt.max_channels is None else min(source.channels, fmt.max_channels)
     rate = source.rate
     if fmt.rates and rate not in fmt.rates:
@@ -221,6 +236,15 @@ def convert(
 
     extras = _tags.read(Path(source.path))
     codec, dither = _codec(fmt, source, bits)
+    # A float file can go over 0 dBFS; a copy that isn't float can't hold it. One gain cut for the
+    # whole file brings its true peak to -1 dBTP, and the result says so. Never a limiter.
+    lowered = 0.0
+    if source.float and not (fmt.lossless and "pcm_f32" in codec[-1]):
+        peak = _true_peak(source.path)
+        if peak is not None and peak > 0.0:
+            lowered = round(peak + 1.0, 1)
+    level = f"volume=-{lowered}dB" if lowered else None
+    dither = ",".join(item for item in (level, dither) if item) or None
     args = [ffmpeg(), "-hide_banner", "-nostdin", "-y", "-i", source.path, "-map", "0:a:0"]
     # Cover art rides along where the format holds a picture; everything else stays behind.
     picture = fmt.id in _tags.PICTURE_FORMATS and extras.cover
@@ -233,7 +257,7 @@ def convert(
     if channels != source.channels:
         args += ["-ac", str(channels)]
     if fmt.bitrates:
-        args += ["-b:a", f"{fmt.bitrates[-1]}k"]
+        args += ["-b:a", f"{_bitrate(fmt, channels)}k"]
     args += [*fmt.extra, *_tags.metadata_args(fmt.id, extras, rate / source.rate if source.rate else 1.0)]
     args += ["-f", fmt.muxer, "-progress", "pipe:1", "-nostats", str(target)]
     step = _Plan(source, fmt, target, args)
@@ -243,7 +267,36 @@ def convert(
     except BaseException:
         done.unlink(missing_ok=True)
         raise
-    return done
+    result = Converted(done)
+    if lowered:
+        result.lowered_db = lowered
+        result.note = f"Lowered {lowered:g} dB so it doesn't clip."
+    return result
+
+
+def _true_peak(path: str) -> float | None:
+    """The file's true peak in dBFS (4x oversampled, EBU R 128), read as ffmpeg streams it."""
+    done = subprocess.run(
+        [ffmpeg(), "-hide_banner", "-nostdin", "-i", path, "-map", "0:a:0", "-af", "ebur128=peak=true:framelog=quiet", "-f", "null", "-"],
+        capture_output=True, text=True, errors="replace", timeout=3600,
+    )
+    found = re.search(r"True peak:\s+Peak:\s+(-?[\d.]+|-inf) dBFS", done.stderr)
+    if not found or found.group(1) == "-inf":
+        return None
+    return float(found.group(1))
+
+
+def _bitrate(fmt: Format, channels: int) -> int:
+    """The bitrate for ``channels``: Ogg's is per pair of channels, so 7.1 gets enough to encode."""
+    rate = fmt.bitrates[-1]
+    return rate * max(1, (channels + 1) // 2) if fmt.id == "ogg" else rate
+
+
+def _check_channels(fmt: Format, channels: int, name: str) -> None:
+    if fmt.channel_limit and channels > fmt.channel_limit:
+        from ox1audio.action import Problem
+
+        raise Problem(f"{name} has {channels} channels, and {fmt.label} holds at most {fmt.channel_limit}.", hint="Choose WAV or AIFF, which hold every channel.")
 
 
 def _check_bits(name: str, bits: int | None) -> None:
@@ -402,15 +455,8 @@ def write(samples, rate: int, format_id: str = "wav", folder: str | Path | None 
     floating = fmt.lossless and bits == 32
     peak = float(np.max(np.abs(data))) if data.size else 0.0
     if peak > 1.0 and not floating:
-        import math
-
-        over = 20 * math.log10(peak)
-        what = f"{bits or 24}-bit {fmt.label}" if fmt.lossless else fmt.label
-        raise ValueError(_teach(
-            f"ox.audio.write: the samples peak at +{over:.1f} dBFS, over full scale, so {what} would clip them.",
-            f"lower the gain (samples * {math.floor(1 / peak * 100) / 100}), or write \"wav\" with bits=32 (float keeps overs)",
-            "audio#levels",
-        ))
+        _refuse_over(np, samples, peak, f"{bits or 24}-bit {fmt.label}" if fmt.lossless else fmt.label)
+    _check_channels(fmt, data.shape[1], name)
     rate = int(rate)
     out = Path(folder) if folder else _temp()
     out.mkdir(parents=True, exist_ok=True)
@@ -440,13 +486,37 @@ def write(samples, rate: int, format_id: str = "wav", folder: str | Path | None 
     if channels != data.shape[1]:
         args += ["-ac", str(channels)]
     if fmt.bitrates:
-        args += ["-b:a", f"{fmt.bitrates[-1]}k"]
+        args += ["-b:a", f"{_bitrate(fmt, channels)}k"]
     args += [*fmt.extra, "-f", fmt.muxer, str(target)]
     result = subprocess.run(args, input=raw[1], capture_output=True, timeout=3600)
     if result.returncode != 0:
         target.unlink(missing_ok=True)
         raise RuntimeError(result.stderr.decode(errors="replace").strip().splitlines()[-1:] or "The file couldn't be written.")
     return target
+
+
+def _refuse_over(np, samples, peak: float, what: str) -> None:
+    """Samples over full scale: say why, with a fix that works. Integer samples are the usual cause."""
+    import math
+
+    from ox1audio.action import _teach
+
+    kind = getattr(samples, "dtype", None)
+    if (kind is not None and np.issubdtype(kind, np.integer)) or peak > 64:
+        # scipy.io.wavfile and soundfile(dtype="int16") give integers: 32767 is full scale, not 1.0.
+        bits = 16 if peak <= 32768 else 24 if peak <= 8388608 else 32
+        raise ValueError(_teach(
+            f"ox.audio.write: the samples look like {bits}-bit integers (peak {peak:.0f}), but write takes floats from -1 to 1.",
+            f"divide them by {2 ** (bits - 1)} (samples / {2 ** (bits - 1)}), or read the file with ox.audio.read, which gives floats",
+            "audio#levels",
+        ))
+    over = 20 * math.log10(peak)
+    gain = 10 ** (-(over + 0.1) / 20)
+    raise ValueError(_teach(
+        f"ox.audio.write: the samples peak at +{over:.1f} dBFS, over full scale, so {what} would clip them.",
+        f"lower the gain by {over + 0.1:.1f} dB (samples * {gain:.3g}), or write \"wav\" with bits=32 (float keeps overs)",
+        "audio#levels",
+    ))
 
 
 def _quantize(np, data, depth: int):
