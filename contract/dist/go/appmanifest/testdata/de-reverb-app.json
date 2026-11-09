@@ -1,7 +1,7 @@
 {
   "$schema": "https://0x1audio.com/schema/app/v1.json",
   "name": "de-reverb",
-  "displayName": "SonicDryer",
+  "displayName": "De-reverb",
   "summary": "Take the reverb and echo out of a recording.",
   "version": "0.2.0",
   "sdk": "^0.3",

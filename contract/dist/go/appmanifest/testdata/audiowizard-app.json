@@ -1,7 +1,7 @@
 {
   "$schema": "https://0x1audio.com/schema/app/v1.json",
   "name": "audiowizard",
-  "displayName": "audioWizard",
+  "displayName": "Pitch & Tempo",
   "summary": "Change pitch, formant and tempo, each on its own.",
   "version": "0.2.0",
   "sdk": "^0.3",
