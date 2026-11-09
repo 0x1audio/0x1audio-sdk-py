@@ -65,7 +65,7 @@
   {
    "name": "Slider",
    "group": "Inputs",
-   "props": "className, thumbLabels, valueText, ...props",
+   "props": "className, thumbLabels, valueText, origin, ...props",
    "use": "as named."
   },
   {
