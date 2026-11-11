@@ -137,7 +137,7 @@
   {
    "name": "Spinner",
    "group": "Feedback",
-   "props": "className, ...props (React.ComponentProps<\"svg\">)",
+   "props": "className, ...props (ComponentProps<\"span\">)",
    "use": "inside a button that is working (\"Installing…\"), or a one-line status."
   },
   {
@@ -156,7 +156,13 @@
    "name": "Toaster",
    "group": "Feedback",
    "props": "theme, position, ...props (ToasterProps)",
-   "use": "bottom-right, one line, one optional action (usually Undo)."
+   "use": "bottom-right of the page above the player strip, one line as wide as it needs, one optional action (usually Undo, Try again or Show in Finder) drawn as an outli"
+  },
+  {
+   "name": "Tooltip",
+   "group": "Feedback",
+   "props": "label: ReactNode, shortcut?: string, side?: \"top\" | \"bottom\" | \"left\" | \"right\", disabled?: boolean, children: ReactElement, className?: string",
+   "use": "an icon button's name and key on hover and focus (\"Hum to find ⌘⇧H\"), ink on the page colour, centred under it."
   },
   {
    "name": "Kbd",
@@ -191,7 +197,7 @@
   {
    "name": "ActionForm",
    "group": "Audio",
-   "props": "action: string | ActionSpec, host?: ActionHost, openWith?: string[], className?: string",
+   "props": "action: string | ActionSpec, host?: ActionHost, openWith?: string[], onSettled?: (outcome: Settled) => void, className?: string",
    "use": "generated app UIs."
   },
   {
