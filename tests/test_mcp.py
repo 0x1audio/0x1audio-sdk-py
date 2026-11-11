@@ -213,6 +213,41 @@ class LibraryTest(unittest.TestCase):
         self.assertEqual(self.calls[-1]["caller"], "cursor-vscode")
 
 
+class LibraryOnWindowsTest(unittest.TestCase):
+    """Windows' way (GAB-263): 127.0.0.1, with the port and the session's token from Mixel's endpoint file."""
+
+    def test_the_call_goes_to_the_port_with_the_token(self):
+        import socket
+        import threading
+
+        data = Path(tempfile.mkdtemp(prefix="ox1-mcp-win-"))
+        (data / "agent").mkdir()
+        listener = socket.create_server(("127.0.0.1", 0))
+        calls = []
+
+        def mixel():
+            link, _ = listener.accept()
+            with link, link.makefile("rwb") as stream:
+                calls.append(json.loads(stream.readline()))
+                stream.write((json.dumps({"id": 1, "ok": True, "text": json.dumps({"sounds": 4, "concepts": {}})}) + "\n").encode())
+                stream.flush()
+
+        threading.Thread(target=mixel, daemon=True).start()
+        try:
+            with mock.patch.dict(os.environ, {"MIXEL_DATA_DIR": str(data), "MIXEL_ASSISTANT": "cursor"}), mock.patch.object(sys, "platform", "win32"):
+                # No endpoint file: Mixel isn't open, and nothing is guessed.
+                closed = Server().call("library_overview", {})
+                self.assertTrue(closed["isError"])
+                self.assertIn("Open Mixel", closed["content"][0]["text"])
+                (data / "agent" / "endpoint.json").write_text(json.dumps({"port": listener.getsockname()[1], "token": "t" * 43}))
+                found = Server().call("library_overview", {})
+            self.assertEqual(found["structuredContent"], {"sounds": 4, "concepts": {}})
+            self.assertEqual(calls, [{"id": 1, "caller": "cursor", "tool": "library_overview", "args": {}, "token": "t" * 43}])
+        finally:
+            listener.close()
+            shutil.rmtree(data, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()
 

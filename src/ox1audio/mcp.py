@@ -310,20 +310,19 @@ def _library(tool: str, args: dict) -> dict:
     call = {"id": 1, "caller": os.environ.get("MIXEL_ASSISTANT") or _client, "tool": tool, "args": args}
     agent = _data_dir() / "agent"
     try:
-        if sys.platform == "win32":
-            # Not on in Mixel for Windows yet (GAB-263), and never run there. The pipe's name and
-            # this session's token are in a file in the person's own profile; no file, no Mixel.
-            where = json.loads((agent / "endpoint.json").read_text())
-            with open(where["path"], "r+b", buffering=0) as pipe:
-                pipe.write((json.dumps({**call, "token": where["token"]}) + "\n").encode())
-                answer = pipe.readline()
-        else:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as link:
+        with contextlib.ExitStack() as stack:
+            if sys.platform == "win32":
+                # Windows (GAB-263): Mixel listens on 127.0.0.1 only, on a port and with a token that
+                # are new at every start, both in a file in the person's own profile. No file, no Mixel.
+                where = json.loads((agent / "endpoint.json").read_text())
+                call["token"] = where["token"]
+                link = stack.enter_context(socket.create_connection(("127.0.0.1", int(where["port"])), timeout=30))
+            else:
+                link = stack.enter_context(socket.socket(socket.AF_UNIX, socket.SOCK_STREAM))
                 link.settimeout(30)
                 link.connect(str(agent / "mixel.sock"))
-                link.sendall((json.dumps(call) + "\n").encode())
-                with link.makefile("rb") as reader:
-                    answer = reader.readline()
+            link.sendall((json.dumps(call) + "\n").encode())
+            answer = stack.enter_context(link.makefile("rb")).readline()
         reply = json.loads(answer)
         body = json.loads(reply["text"])
     except TimeoutError:
