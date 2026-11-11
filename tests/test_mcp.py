@@ -2,11 +2,13 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import ox1audio as ox
 from ox1audio.mcp import Server
@@ -14,11 +16,14 @@ from ox1audio.mcp import Server
 SRC = str(Path(ox.__file__).resolve().parents[1])
 
 
+# No Mixel answers here, so a test never reaches the Library of whoever runs it.
+NOWHERE = str(Path(tempfile.gettempdir()) / "ox1-mcp-no-mixel")
+
 class Session:
     """A real client session: mixel mcp in a subprocess, JSON-RPC lines both ways."""
 
     def __init__(self, *flags):
-        self.process = subprocess.Popen([sys.executable, "-m", "ox1audio.cli", "mcp", *flags], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env={**os.environ, "PYTHONPATH": SRC})
+        self.process = subprocess.Popen([sys.executable, "-m", "ox1audio.cli", "mcp", *flags], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env={**os.environ, "PYTHONPATH": SRC, "MIXEL_DATA_DIR": NOWHERE})
         self.next = 0
 
     def ask(self, method, params=None):
@@ -55,7 +60,7 @@ class McpTest(unittest.TestCase):
         self.assertEqual(init["serverInfo"]["name"], "mixel")
         self.session.process.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
         names = [tool["name"] for tool in self.session.ask("tools/list")["result"]["tools"]]
-        self.assertEqual(names, ["start", "docs_search", "docs_read", "app_new", "app_check", "app_describe", "app_run", "app_test", "ui_components", "app_status", "library_search"])
+        self.assertEqual(names, ["start", "docs_search", "docs_read", "app_new", "app_check", "app_describe", "app_run", "app_test", "ui_components", "app_status", "library_overview", "library_search", "propose_crate"])
         self.assertEqual(names, [tool["name"] for tool in self.session.ask("tools/list")["result"]["tools"]])
 
     def test_an_agent_builds_checks_runs_and_tests_an_app(self):
@@ -125,16 +130,19 @@ class McpTest(unittest.TestCase):
         self.assertIn("waveformFrom(source: Blob | Uint8Array, bars = 120): Promise<Wave>", index["helpers"])
         self.assertEqual(index["types"]["Wave"], "{ peaks: number[]; seconds: number }")
 
-    def test_library_search_is_a_read_only_stub_until_gab_112(self):
-        result = self.session.tool("library_search", query="dry vocal chop in D minor")["structuredContent"]
-        self.assertEqual((result["available"], result["results"]), (False, []))
-        self.assertIn("Settings", result["fix"])
+    def test_library_tools_say_to_open_mixel_when_nothing_answers(self):
+        for name, args in (("library_overview", {}), ("library_search", {"want": "dry vocal chop"}), ("propose_crate", {"title": "x", "request": "y", "ids": ["s1"]})):
+            result = self.session.tool(name, **args)
+            self.assertTrue(result["isError"])
+            error = json.loads(result["content"][0]["text"])["error"]
+            self.assertEqual(error["code"], "library_search_off")
+            self.assertTrue(error["message"].startswith("Open Mixel to search your Library."))
 
 
 class ModesTest(unittest.TestCase):
     def test_read_only_and_publish_feature(self):
         read_only = [tool["name"] for tool in Server(read_only=True).dispatch("tools/list", {})["tools"]]
-        self.assertEqual(read_only, ["start", "docs_search", "docs_read", "app_describe", "ui_components", "app_status", "library_search"])
+        self.assertEqual(read_only, ["start", "docs_search", "docs_read", "app_describe", "ui_components", "app_status", "library_overview", "library_search"])
         self.assertNotIn("app_publish", [tool["name"] for tool in Server().dispatch("tools/list", {})["tools"]])
         publish = [tool for tool in Server(features={"publish"}).dispatch("tools/list", {})["tools"] if tool["name"] == "app_publish"][0]
         self.assertTrue(publish["annotations"]["destructiveHint"])
@@ -142,8 +150,67 @@ class ModesTest(unittest.TestCase):
 
     def test_tool_definitions_stay_small(self):
         text = json.dumps(Server().dispatch("tools/list", {}), separators=(",", ":"))
-        # JSON runs about 0.23 tokens a byte (cl100k; 1260 tokens measured at 5472 bytes): 6000 bytes is about 1.4k.
-        self.assertLess(len(text.encode()), 6000, "MCP tool definitions are over their 1.4k token budget")
+        # JSON runs about 0.23 tokens a byte (cl100k; 1260 tokens measured at 5472 bytes): 7200 bytes is about 1.65k.
+        # 6000 until the three Library tools replaced the stub (GAB-230): they carry how to word a guess.
+        self.assertLess(len(text.encode()), 7200, "MCP tool definitions are over their 1.65k token budget")
+
+
+class LibraryTest(unittest.TestCase):
+    """The three Library tools reach a running Mixel over its socket, and say who is calling."""
+
+    def setUp(self):
+        import socket
+        import threading
+
+        self.data = Path(tempfile.mkdtemp(prefix="ox1-mcp-lib-"))
+        (self.data / "agent").mkdir()
+        self.calls = []
+        self.listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.listener.bind(str(self.data / "agent" / "mixel.sock"))
+        self.listener.listen()
+
+        def mixel():
+            replies = {
+                "library_search": (True, {"answerable": True, "columns": ["id", "title", "type", "key", "bpm", "length", "tier", "reason"], "results": [["s1", "Snare Tape 04.wav", "one-shot", None, None, 0.2, "named", "named snare"]]}),
+                "propose_crate": (False, {"error": {"code": "crates_off", "message": "Proposing crates is off in this Mixel, so nothing was made.", "fix": "the person turns it on"}}),
+            }
+            while True:
+                try:
+                    link, _ = self.listener.accept()
+                except OSError:
+                    return
+                with link, link.makefile("rwb") as stream:
+                    call = json.loads(stream.readline())
+                    self.calls.append(call)
+                    ok, body = replies[call["tool"]]
+                    stream.write((json.dumps({"id": call["id"], "ok": ok, "text": json.dumps(body)}) + "\n").encode())
+                    stream.flush()
+
+        threading.Thread(target=mixel, daemon=True).start()
+        self.env = mock.patch.dict(os.environ, {"MIXEL_DATA_DIR": str(self.data), "MIXEL_ASSISTANT": "claude-code"})
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+        self.listener.close()
+        shutil.rmtree(self.data, ignore_errors=True)
+
+    @unittest.skipIf(sys.platform == "win32", "a named pipe on Windows")
+    def test_a_search_is_carried_to_mixel_and_back_as_it_was(self):
+        server = Server()
+        server.dispatch("initialize", {"clientInfo": {"name": "cursor-vscode"}})
+        found = server.call("library_search", {"want": "dusty snare", "avoid": ["clap"]})
+        self.assertFalse(found["isError"])
+        self.assertEqual(found["structuredContent"]["results"][0][6:], ["named", "named snare"])
+        self.assertEqual(self.calls[0], {"id": 1, "caller": "claude-code", "tool": "library_search", "args": {"want": "dusty snare", "avoid": ["clap"]}})
+        # Mixel's refusal comes back with its own code and fix.
+        refused = server.call("propose_crate", {"title": "Dusty snares", "request": "three dusty snares", "ids": ["s1"]})
+        self.assertTrue(refused["isError"])
+        self.assertEqual(json.loads(refused["content"][0]["text"])["error"]["code"], "crates_off")
+        # Without MIXEL_ASSISTANT, the caller is what the assistant calls itself.
+        with mock.patch.dict(os.environ, {"MIXEL_ASSISTANT": ""}):
+            server.call("library_search", {"want": "snare"})
+        self.assertEqual(self.calls[-1]["caller"], "cursor-vscode")
 
 
 if __name__ == "__main__":
