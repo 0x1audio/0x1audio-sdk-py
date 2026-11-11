@@ -305,22 +305,23 @@ def _library(tool: str, args: dict) -> dict:
     The socket exists only while Mixel is open and the person has the switch on. Everything else
     (caps, ids, the 300-token reply) is decided in Mixel; this only carries the call.
     """
-    import hashlib
     import socket
 
-    line = (json.dumps({"id": 1, "caller": os.environ.get("MIXEL_ASSISTANT") or _client, "tool": tool, "args": args}) + "\n").encode()
-    data = _data_dir()
+    call = {"id": 1, "caller": os.environ.get("MIXEL_ASSISTANT") or _client, "tool": tool, "args": args}
+    agent = _data_dir() / "agent"
     try:
         if sys.platform == "win32":
-            name = hashlib.sha256(str(data.resolve()).lower().encode()).hexdigest()[:16]
-            with open(rf"\\.\pipe\mixel-agent-{name}", "r+b", buffering=0) as pipe:
-                pipe.write(line)
+            # Not on in Mixel for Windows yet (GAB-263), and never run there. The pipe's name and
+            # this session's token are in a file in the person's own profile; no file, no Mixel.
+            where = json.loads((agent / "endpoint.json").read_text())
+            with open(where["path"], "r+b", buffering=0) as pipe:
+                pipe.write((json.dumps({**call, "token": where["token"]}) + "\n").encode())
                 answer = pipe.readline()
         else:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as link:
                 link.settimeout(30)
-                link.connect(str(data / "agent" / "mixel.sock"))
-                link.sendall(line)
+                link.connect(str(agent / "mixel.sock"))
+                link.sendall((json.dumps(call) + "\n").encode())
                 with link.makefile("rb") as reader:
                     answer = reader.readline()
         reply = json.loads(answer)
