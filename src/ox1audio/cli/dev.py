@@ -24,8 +24,9 @@ SKIPPED = {".venv", ".git", "node_modules", "__pycache__", "tests", ".mixel"}
 
 def desktop_folder() -> Path:
     """Where the Mixel desktop keeps its data (its Electron userData folder)."""
-    if os.environ.get("MIXEL_DESKTOP_DIR"):
-        return Path(os.environ["MIXEL_DESKTOP_DIR"])
+    # MIXEL_DATA_DIR is the desktop's own name for it (and ox1audio.local's); MIXEL_DESKTOP_DIR is the older one.
+    if os.environ.get("MIXEL_DATA_DIR") or os.environ.get("MIXEL_DESKTOP_DIR"):
+        return Path(os.environ.get("MIXEL_DATA_DIR") or os.environ["MIXEL_DESKTOP_DIR"])
     home = Path.home()
     if sys.platform == "darwin":
         return home / "Library" / "Application Support" / "0x1audio"
@@ -42,7 +43,7 @@ class Desktop:
         settings = desktop_folder() / "settings.json"
         unavailable = Stop(
             "Mixel isn't running with developer mode on.",
-            fix=f'open Mixel and turn on Settings › Developer mode (or add "developerMode": true to {settings} and reopen Mixel)',
+            fix=f'open Mixel, turn on Settings › Developer mode (or add "developerMode": true to {settings}), then quit and reopen Mixel',
             doc="start#mixel-dev", code=NETWORK, error="desktop_unavailable",
         )
         try:

@@ -61,7 +61,7 @@ Every error has a code, what happened, and the fix. The message you see names th
 | `tests_did_not_run` | The test runner itself failed. | Run python -m unittest in the app's folder to see the whole error. |
 | `no_such_action` | mixel run named an action the app doesn't have. | Use a name mixel check lists. |
 | `no_such_topic` | mixel docs named a page that doesn't exist. | mixel docs --list |
-| `desktop_unavailable` | Mixel isn't running, or developer mode is off. | Open Mixel and turn on Settings › Developer mode. |
+| `desktop_unavailable` | Mixel isn't running, or developer mode is off. | Open Mixel, turn on Settings › Developer mode, then quit and reopen Mixel. |
 | `desktop_error` | The desktop refused or failed a dev request. | Follow the message; mixel doctor checks the setup. |
 | `not_signed_in` | No sign-in, or it expired. | mixel login |
 | `expired_token` | The pairing code expired before it was confirmed. | mixel login |
@@ -74,4 +74,33 @@ Every error has a code, what happened, and the fix. The message you see names th
 | `git_not_pushed` | The commit isn't on GitHub yet. | git push |
 | `not_repo_root` | The app isn't at the top of its git repository. | Give the app its own repository. |
 | `not_github` | The remote isn't a GitHub repository. | Push the app to a public GitHub repository. |
-| `library_search_off` | Library search for agents is off, or not built yet. | The person turns it on in Mixel › Settings › Library. |
+
+## From the person's Library (mixel mcp, ox1audio.local and Mixel's own assistant tools)
+
+| Code | Means | Usual fix |
+| --- | --- | --- |
+| `library_search_off` | Mixel is closed, or Let an assistant search your Library is off. | The person opens Mixel and turns it on in Settings › Your assistant. |
+| `not_ready` | Mixel can't compare sounds yet: the sound model is off or still indexing. Search by words still works. | Search with words instead, or ask the person to check Mixel. |
+| `unknown_id` | An id that no search in this Mixel session returned, or one it no longer remembers. | Search again and use the ids it returns. |
+| `too_many` | More than a search or a crate takes: 5 avoid or unlike words, 50 sounds in a crate. | Keep the ones that matter most. |
+| `crates_off` | Proposing crates is off in this Mixel, so nothing was made. | Tell the person what you found; they can turn on Settings › Your assistant › It can propose crates. |
+| `unknown_tool` | Mixel has no tool by that name. | Use library_overview, library_search or propose_crate. |
+| `too_long` | Mixel's answer was over its limit, so it wasn't sent. | Ask for less: fewer words, or a narrower filter. |
+| `mixel_error` | Mixel couldn't answer, for a reason it keeps to itself. | Try again; if it keeps failing, tell the person. |
+
+## From the registry and the cloud (mixel login, publish and status)
+
+| Code | Means | Usual fix |
+| --- | --- | --- |
+| `github_required` | The Mixel account has no GitHub account connected, and reviewers read the code there. | Connect GitHub on your account page, then publish again. |
+| `repository_invalid` | repository isn't a GitHub repository like github.com/owner/repo. | Push the app to GitHub and publish from its folder. |
+| `repository_not_yours` | The repository isn't one of the public repositories GitHub shows for the connected account. | Push the app to a public repository you own, or connect the GitHub account that owns it. |
+| `commit_invalid` | commit isn't the full 40-character SHA of a commit. | git rev-parse HEAD |
+| `commit_not_pushed` | The commit isn't on GitHub yet. | git push |
+| `message_invalid` | The note for reviewers is over 500 characters. | Shorten it. |
+| `submission_pending` | A version of this app is already waiting for review. | mixel status shows it; publish again once it is decided. |
+| `app_required` | The request doesn't name the app. | Name it as app.json does: mixel status in the app's folder does this. |
+| `rate_limited` | Too many requests in a short time, like more than 10 submissions in an hour. | Wait, then try again; the message says how long. |
+| `waitlisted` | The account is on the waitlist, so only sign-in, sign-out and the account's own data answer. | Wait for the email that says you're in. |
+| `terms_required` | The account hasn't agreed to the Terms of Service. | Open cloud.0x1audio.com, agree, then run mixel login again. |
+| `plan_required` | The account's plan doesn't include this; the error names what it needs. | See the plans on your account page. |

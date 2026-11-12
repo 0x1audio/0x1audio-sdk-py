@@ -156,7 +156,7 @@
    "name": "Toaster",
    "group": "Feedback",
    "props": "theme, position, ...props (ToasterProps)",
-   "use": "bottom-right of the page above the player strip, one line as wide as it needs, one optional action (usually Undo, Try again or Show in Finder) drawn as an outli"
+   "use": "bottom-right of the page above the player strip, one line as wide as it needs, one optional action (usually Undo, Try again or Show in Finder) drawn as an…"
   },
   {
    "name": "Tooltip",
