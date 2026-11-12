@@ -47,6 +47,7 @@ jobs:
         run: |
           uv run python -m unittest discover tests
           uv run python contract/generate.py --check
+          uv run --extra generate python scripts/openapi.py --check
 
       # Reproducible: the wheel's timestamps are the commit's, as in the desktop's pin (scripts/sdk-pin.mjs).
       - name: Build

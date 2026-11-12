@@ -25,6 +25,8 @@ STRINGS = "call the function you mean directly; Mixel only runs code it can read
 PACKAGES = 'use urllib.request (the standard library), and declare "network": {"why": "…", "hosts": ["example.com"]} in app.json'
 HOME = "use the files the person chooses (ox.Files, ox.Folder), ox.temp() or ox.data"
 DYNAMIC = "import the module by name at the top of the file, so mixel check and the review can see it"
+# The SDK's tools for scripts outside Mixel: the Library socket, the cloud with a person's token, the mixel command.
+TOOLS = "an app reaches the Library through ox.library and the library permission; these modules are for scripts outside Mixel"
 
 # Modules an app may not import at all, and the fix for each.
 MODULES = {
@@ -37,6 +39,7 @@ MODULES = {
     "requests": PACKAGES, "httpx": PACKAGES, "aiohttp": PACKAGES, "urllib3": PACKAGES,
     "runpy": STRINGS, "code": STRINGS, "codeop": STRINGS, "marshal": STRINGS,
     "importlib.util": DYNAMIC, "importlib.machinery": DYNAMIC, "importlib.abc": DYNAMIC, "zipimport": DYNAMIC, "pkgutil": DYNAMIC,
+    "ox1audio.local": TOOLS, "ox1audio.api": TOOLS, "ox1audio.cli": TOOLS, "ox1audio.mcp": TOOLS,
 }
 
 # Names an app may not use, wherever they come from.

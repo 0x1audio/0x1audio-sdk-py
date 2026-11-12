@@ -1,4 +1,4 @@
-"""A client library for accessing 0x1audio Cloud"""
+"""A client library for accessing Mixel API"""
 
 from .client import AuthenticatedClient, Client
 
