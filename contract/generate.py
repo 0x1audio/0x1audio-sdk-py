@@ -568,7 +568,8 @@ def _signature(source: str, name: str) -> str:
     kind = re.sub(r"\s+", " ", params[j + 1 :].lstrip(":").strip())
     if kind.startswith("{"):  # an inline type: show each prop with its type, ? for optional
         raw = params[j + 1 :].lstrip(":").strip().strip("{}")
-        typed = [f"{m.group(1)}{m.group(2)}: {re.sub(r'\s+', ' ', m.group(3)).strip()}" for m in re.finditer(r"(\w+)(\??)\s*:\s*([^\n;]+)", raw)]
+        space = re.compile(r"\s+")  # outside the f-string: Python 3.11 allows no backslash in one
+        typed = [f"{m.group(1)}{m.group(2)}: {space.sub(' ', m.group(3)).strip()}" for m in re.finditer(r"(\w+)(\??)\s*:\s*([^\n;]+)", raw)]
         if typed and len(", ".join(typed)) <= 200:
             return ", ".join(typed)
     shown = ", ".join(name for name in names if name)
