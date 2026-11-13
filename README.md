@@ -213,7 +213,7 @@ Waits grow from about 0.25 s (the cloud) or 0.1 s (Mixel). Nothing is retried wh
 
 ```bash
 uv sync --extra generate
-uv run python -m unittest discover tests
+uv run --with numpy python -m unittest discover tests   # numpy: the audio tests skip without it
 uv run python contract/generate.py --check   # nothing drifted from the contract
 uv run python scripts/openapi.py --check     # openapi.json and ox1audio.cloud against the cloud's spec
 uv run python scripts/openapi.py             # cut openapi.json again and regenerate ox1audio.cloud

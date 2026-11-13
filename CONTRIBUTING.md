@@ -25,7 +25,7 @@ uv sync --extra generate
 Run these before you open a pull request:
 
 ```bash
-uv run python -m unittest discover tests
+uv run --with numpy python -m unittest discover tests   # numpy: the audio tests skip without it
 uv run python contract/generate.py --check   # nothing drifted from the contract
 uv run python scripts/openapi.py --check     # openapi.json and ox1audio.cloud against the cloud's spec
 ```

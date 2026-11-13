@@ -21,7 +21,7 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Test
         run: |
-          uv run --python ${{ matrix.python }} python -m unittest discover tests
+          uv run --python ${{ matrix.python }} --with numpy python -m unittest discover tests
           uv run --python ${{ matrix.python }} python contract/generate.py --check
           uv run --python ${{ matrix.python }} --extra generate python scripts/openapi.py --check
       - name: The wheel installs and runs with nothing else around
