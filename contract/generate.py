@@ -233,7 +233,8 @@ def permissions_doc(c: dict) -> str:
     lines = ["# Permissions", "", "An app asks only for what its code uses, each with one sentence that says why. Declared is binding: Mixel refuses anything else. The install sheet shows the words below and the app's reason.", "",
              "| Code | The person reads | Needed for |", "| --- | --- | --- |"]
     lines += [f"| `{code}` | {info['text']} | {info['uses']} |" for code, info in c["permissions"].items()]
-    return "\n".join(lines + ["", '`network` is `{"why": "…", "hosts": ["example.com"]}`. The whole web, IPs and localhost are refused.', ""])
+    return "\n".join(lines + ["", '`network` is `{"why": "…", "hosts": ["example.com"]}`. The whole web, IPs and localhost are refused.', "",
+                          "`library-read` and `network` can't be asked for together by an app that isn't one of Mixel's own, until Mixel runs apps in a sandbox. `mixel check` fails on the pair (`permission_pair`), and Mixel won't install or open the app. A Files control lets people choose their sounds without `library-read`.", ""])
 
 
 def protocol_doc(c: dict) -> str:

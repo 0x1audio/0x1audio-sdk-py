@@ -12,3 +12,5 @@ An app asks only for what its code uses, each with one sentence that says why. D
 | `network` | Use the network | reaching the listed hosts only (downloads, page fetch) |
 
 `network` is `{"why": "…", "hosts": ["example.com"]}`. The whole web, IPs and localhost are refused.
+
+`library-read` and `network` can't be asked for together by an app that isn't one of Mixel's own, until Mixel runs apps in a sandbox. `mixel check` fails on the pair (`permission_pair`), and Mixel won't install or open the app. A Files control lets people choose their sounds without `library-read`.
