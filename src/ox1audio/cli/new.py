@@ -132,7 +132,7 @@ createRoot(document.getElementById("root")!).render(
     "src/App.tsx": """import {{ ActionForm, PageHeader }} from "@0x1audio/design-system"
 
 // The form Mixel would draw for the convert action. Build your own page around it,
-// or call ox.run("convert", {{ files, format }}) from "@0x1audio/sdk/page".
+// or call ox.run("convert", {{ files, format }}) from "@ox1audio/sdk/page".
 export function App() {{
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 p-8">
@@ -179,10 +179,10 @@ def command(args: list[str]) -> int:
 
 
 def page_packages() -> dict[str, str]:
-    """Where @0x1audio/sdk and @0x1audio/design-system come from. Until they are on npm (GAB-40),
+    """Where @ox1audio/sdk and @0x1audio/design-system come from. Until they are on npm (GAB-40),
     a checkout next to this SDK (how Mixel's own apps build) is linked with file:."""
     projects = Path(__file__).resolve().parents[4]
-    local = {"@0x1audio/sdk": projects / "0x1audio-sdk-ts", "@0x1audio/design-system": projects / "0x1audio-cloud" / "packages" / "design-system"}
+    local = {"@ox1audio/sdk": projects / "0x1audio-sdk-ts", "@0x1audio/design-system": projects / "0x1audio-cloud" / "packages" / "design-system"}
     return {name: f"file:{path}" if (path / "package.json").is_file() else "^0.3.0" for name, path in local.items()}
 
 
