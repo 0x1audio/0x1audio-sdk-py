@@ -193,4 +193,4 @@ uv run python scripts/openapi.py             # cut openapi.json again and regene
 
 Apache-2.0 · contributions under the [DCO](CONTRIBUTING.md#sign-off-your-commits-dco).
 
-The SDK and the `mixel` command are open source under the [Apache License 2.0](LICENSE); see also [NOTICE](NOTICE). Apps you build with them can use any licence you like. The licence covers the code, not the name: "Mixel" and its marks are trademarks of 0x1audio, and [TRADEMARKS.md](https://github.com/0x1audio/mixel/blob/main/TRADEMARKS.md) explains how to use them. To report a vulnerability, see [SECURITY.md](SECURITY.md).
+The SDK and the `mixel` command are open source under the [Apache License 2.0](LICENSE); see also [NOTICE](NOTICE). Apps you build with them can use any licence you like. The licence covers the code, not the name: "Mixel" and its marks are trademarks of 0x1audio, and [the trademark policy](https://0x1audio.com/trademarks) explains how to use them. To report a vulnerability, see [SECURITY.md](SECURITY.md).
