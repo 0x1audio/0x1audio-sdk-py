@@ -22,6 +22,9 @@ _version = re.compile(rules.VERSION_PATTERN)
 _range = re.compile(rules.SDK_PATTERN)
 _accent = re.compile(rules.ACCENT_PATTERN)
 _host = re.compile(rules.HOST_PATTERN)
+# The two permissions an app that isn't one of Mixel's own can't hold together, until apps run in a
+# sandbox: one shows the person's Library, the other could send what it shows somewhere else.
+PAIR = frozenset({"library-read", "network"})
 
 
 @dataclass
@@ -156,6 +159,9 @@ def check(folder: Path) -> Manifest:
             low, high = rules.REASON_LENGTH
             if not isinstance(reason, str) or not low <= len(reason.strip()) <= high:
                 bad("permission_reason", f"permissions.{code}", "Each permission has a reason the person reads: one sentence, 12 to 120 characters.", f'"{code}": "{_example_reason(code)}"', "permissions")
+    if isinstance(permissions, dict) and PAIR <= set(permissions) and not official(folder):
+        bad("permission_pair", "permissions", "library-read and network can't be asked for together yet. An app that sees the person's Library can't also reach the network until Mixel runs apps in a sandbox, so Mixel won't install or open this one.",
+            "keep one of them: a Files control lets people choose their sounds without library-read", "permissions#library-read-and-network")
     if "accent" in data and (not isinstance(data["accent"], str) or not _accent.match(data["accent"])):
         bad("manifest_accent", "accent", "accent is a colour like #3366ff.", '"accent": "#5b8cff"')
     icon = data.get("icon")
@@ -174,6 +180,18 @@ def check(folder: Path) -> Manifest:
     if tags is not None and (not isinstance(tags, list) or len(tags) > rules.TAGS_MAX or any(not isinstance(tag, str) or not tag or len(tag) > 64 or re.search(r"\s", tag) for tag in tags)):
         bad("manifest_tags", "tags", f"tags is up to {rules.TAGS_MAX} single words.", '"tags": ["convert"]')
     return Manifest(data, found)
+
+
+def official(folder: Path) -> bool:
+    """One of Mixel's own apps: a checkout whose origin is a 0x1audio repository on GitHub.
+    The same test Mixel applies to an installed app; a fork or a copy is anyone else's."""
+    try:
+        text = (folder / ".git" / "config").read_text()
+    except OSError:
+        return False
+    origin = next((block for block in re.split(r"\r?\n(?=\[)", text) if block.startswith('[remote "origin"]')), "")
+    url = re.search(r"^\s*url\s*=\s*(\S+)", origin, re.M)
+    return bool(url and re.fullmatch(r"(?:https://github\.com/|git@github\.com:)0x1audio/[A-Za-z0-9_][A-Za-z0-9._-]*?(?:\.git)?/?", url.group(1)))
 
 
 def accepts(range_: str, version: str) -> bool:

@@ -79,7 +79,7 @@ Python packages go in `pyproject.toml` › `[project].dependencies`, wheels only
 ## A page (only when the drawn form is not enough)
 `mixel new --page` adds one: Vite + React, built to `dist/index.html`. It uses `@0x1audio/design-system` and the same actions:
 ```tsx
-import { ox } from "@0x1audio/sdk/page"
+import { ox } from "@ox1audio/sdk/page"
 import { ActionForm } from "@0x1audio/design-system"
 
 export const App = () => <ActionForm action="convert" />   // the form Mixel draws; build around it

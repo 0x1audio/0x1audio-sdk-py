@@ -45,6 +45,9 @@ Every release of `ox1audio` (the Python SDK and the `mixel` command), newest fir
 - `library_search_off` says where the switch is now: Settings › Your assistant. `desktop_unavailable` says to reopen Mixel after turning on Developer mode, because it takes effect then.
 - A design-system component's one-line use, in `ui_components`, is cut after a whole word.
 - **`ox1audio.cloud` now matches the Mixel cloud as it is.** The calls are `health`, `me`, `cli_login`, `cli_login_poll`, `cli_tokens`, `revoke_cli_token`, `app_catalog`, `create_submission`, `submissions` and `submission`.
+- **`mixel check` fails when `app.json` asks for `library-read` and `network` together** (`permission_pair`). An app that sees the person's Library can't also reach the network until Mixel runs apps in a sandbox, and Mixel won't install or open one that asks for both. Mixel's own apps (a checkout whose origin is a 0x1audio repository) follow the rules they had. A Files control lets people choose their sounds without `library-read`.
+- **`mixel check --fix` installs numpy for `ox.audio.read` and `ox.audio.write`.** It listed numpy and wrote `uv.lock` but didn't install it, so the next `mixel check` passed and `mixel run` stopped at the helper. A listed package the helpers need that isn't installed is now `dependency_not_installed`, which `--fix` settles with `uv sync`; without `uv`, the finding stays and names the command.
+- `mixel new --page` and AGENTS.md name the page SDK `@ox1audio/sdk`, the name it has on npm.
 - `mixel check` refuses `ox1audio.local`, `ox1audio.api`, `ox1audio.cli` and `ox1audio.mcp` in an app's code. An app reaches the Library through `ox.library` and its `library` permission.
 
 ### Removed

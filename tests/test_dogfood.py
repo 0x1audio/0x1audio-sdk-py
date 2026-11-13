@@ -102,7 +102,7 @@ class PageScaffoldTest(unittest.TestCase):
             self.assertEqual(json.loads((app / "app.json").read_text())["page"], "dist/index.html")
             package = json.loads((app / "package.json").read_text())
             self.assertEqual(package["license"], "Apache-2.0")
-            self.assertEqual(set(package["dependencies"]) >= {"@0x1audio/sdk", "@0x1audio/design-system", "react"}, True)
+            self.assertEqual(set(package["dependencies"]) >= {"@ox1audio/sdk", "@0x1audio/design-system", "react"}, True)
             self.assertIn('base: "./"', (app / "vite.config.ts").read_text())
             self.assertIn('dedupe: ["react", "react-dom"]', (app / "vite.config.ts").read_text())
             self.assertIn('<ActionForm action="convert" />', (app / "src" / "App.tsx").read_text())

@@ -473,11 +473,35 @@ def _needs(folder: Path, needs: dict[str, str], found: list[Finding]) -> list[Fi
     declared = _declared(folder)
     missing = []
     for package, where in needs.items():
-        if _normal(package) in declared or any(item.code == "dependency_missing" and f'add "{package}"' in item.fix for item in found):
-            continue
         file, _, helper = where.partition(" (")
+        if _normal(package) in declared:
+            # Listed, but not where the app's code runs (mixel check --fix just added it, or uv sync never ran):
+            # say so here, or check passes and the action stops at the helper with "add numpy to pyproject.toml".
+            if not _installed(folder, package) and not any(item.code == "dependency_not_installed" for item in found):
+                missing.append(Finding("dependency_not_installed", file, f"{helper.rstrip(')')} works on {package} arrays, and {package} is in pyproject.toml but not installed, so the action would stop there.",
+                                       "uv sync   (installs into the app's .venv, which mixel check, test and run use, and writes uv.lock; mixel check --fix runs it)", "actions#dependencies"))
+            continue
+        if any(item.code == "dependency_missing" and f'add "{package}"' in item.fix for item in found):
+            continue
         missing.append(Finding("dependency_missing", file, f"{helper.rstrip(')')} works on {package} arrays, but pyproject.toml doesn't list {package}, so Mixel won't install it.", f'add "{package}" to pyproject.toml › [project].dependencies', "actions#dependencies"))
     return missing
+
+
+def _installed(folder: Path, package: str) -> bool:
+    """Can the Python that runs the app's code (its .venv, else mixel's) import ``package``?"""
+    import subprocess
+
+    from ox1audio.cli.testing import app_env, interpreter
+
+    python = interpreter(folder)
+    if python == sys.executable:
+        return importlib.util.find_spec(package) is not None
+    try:
+        done = subprocess.run([python, "-c", "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec(sys.argv[1]) else 1)", package],
+                              cwd=folder, env=app_env(python), capture_output=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return done.returncode == 0
 
 
 def _lock(folder: Path) -> list[Finding]:
