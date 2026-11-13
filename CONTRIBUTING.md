@@ -15,7 +15,7 @@ You need Git and [uv](https://docs.astral.sh/uv/).
 ```bash
 git clone <this repository> 0x1audio-sdk-py
 cd 0x1audio-sdk-py
-uv sync
+uv sync --extra generate
 ```
 
 `contract/` is the one source for the rules Mixel, the SDKs and the desktop share. Change it there, then run `uv run python contract/generate.py` to rewrite every generated file, including the copies in the sibling checkouts (`0x1audio-sdk-ts`, `0x1audio-cloud` and the official apps). Never edit a generated file by hand; each one says so at the top.
@@ -27,7 +27,12 @@ Run these before you open a pull request:
 ```bash
 uv run python -m unittest discover tests
 uv run python contract/generate.py --check   # nothing drifted from the contract
+uv run python scripts/openapi.py --check     # openapi.json and ox1audio.cloud against the cloud's spec
 ```
+
+`openapi.json` is the developer part of the cloud's spec, and `src/ox1audio/cloud/` is generated from it: `uv run python scripts/openapi.py` rewrites both. The TypeScript SDK cuts the same file, byte for byte.
+
+With Mixel open, `uv run python examples/smoke.py` runs the examples against the real thing. A change to what `ox1audio` exports or does gets a line in [CHANGELOG.md](CHANGELOG.md), under the next version.
 
 ## Pull requests
 

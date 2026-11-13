@@ -1,13 +1,17 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "0x1audio Cloud",
+    "title": "Mixel API",
     "version": "0.1.0",
-    "description": "Identity for the open music cloud. Email, a password, and a short-lived code."
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "description": "The Mixel cloud for developers: your account, signing in the mixel command line, and the reviewed app registry. Send the token from mixel login (or MIXEL_TOKEN) as Authorization: Bearer. Errors are {error: {code, message}}; refusals the command line prints also carry fix or doc_url."
   },
   "servers": [
     {
-      "url": "/"
+      "url": "https://cloud.0x1audio.com"
     }
   ],
   "paths": {
@@ -39,23 +43,24 @@
         }
       }
     },
-    "/api/v1/auth/session": {
+    "/api/v1/me": {
       "get": {
-        "operationId": "session",
-        "summary": "The account behind the session cookie",
+        "operationId": "me",
+        "summary": "Where the account stands, approved or waitlisted, and against the Terms (a session or a CLI token; open while waitlisted)",
+        "description": "A self-hosted cloud without a waitlist may not have this route; a client that gets 404 treats the account as approved.",
         "responses": {
           "200": {
-            "description": "Signed in",
+            "description": "The account's status",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Account"
+                  "$ref": "#/components/schemas/Me"
                 }
               }
             }
           },
           "401": {
-            "description": "No session",
+            "description": "Not signed in",
             "content": {
               "application/json": {
                 "schema": {
@@ -67,57 +72,39 @@
         }
       }
     },
-    "/api/v1/auth/register": {
+    "/api/v1/cli/login": {
       "post": {
-        "operationId": "register",
-        "summary": "Begin account creation and send a code",
+        "operationId": "cliLogin",
+        "summary": "Start a mixel sign-in (device flow)",
+        "description": "The CLI shows user_code and opens verification_url?code=…; the person confirms it on the website while signed in. RFC 8628 style.",
+        "security": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RegisterBody"
+                "$ref": "#/components/schemas/CliLoginBody"
               }
             }
           }
         },
         "responses": {
-          "202": {
-            "description": "The code is on its way, or the address was already known. The response is the same either way.",
+          "200": {
+            "description": "A pairing code to confirm",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Pending"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The form cannot be accepted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/CliDevice"
                 }
               }
             }
           },
           "429": {
-            "description": "Too many attempts",
+            "description": "Too many sign-ins from this network",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "The letter could not be sent",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -125,89 +112,94 @@
         }
       }
     },
-    "/api/v1/auth/register/verify": {
+    "/api/v1/cli/login/poll": {
       "post": {
-        "operationId": "verifyRegistration",
-        "summary": "Check the code before a password is chosen",
+        "operationId": "cliLoginPoll",
+        "summary": "Ask whether the pairing code was confirmed",
+        "description": "400 with error.code authorization_pending (keep polling every interval seconds), slow_down (add 2 s), expired_token, access_denied or terms_required (stop; terms_required: the account hasn't agreed to the Terms, and the message says to agree on the web first). 200 gives the CLI token once; it is sent as Authorization Bearer.",
+        "security": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/VerifyBody"
+                "$ref": "#/components/schemas/CliPollBody"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "The code matches. The proof is used once, to choose the password.",
+            "description": "Confirmed, so here is the CLI token",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CodeAccepted"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "The code is wrong or spent",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many attempts",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/auth/register/password": {
-      "post": {
-        "operationId": "choosePassword",
-        "summary": "Choose the password and open a session",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PasswordBody"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Account created and session opened",
-            "headers": {
-              "Set-Cookie": {
-                "description": "ox1_session",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Account"
+                  "$ref": "#/components/schemas/CliToken"
                 }
               }
             }
           },
           "400": {
-            "description": "The password cannot be accepted",
+            "description": "Not confirmed (yet)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/cli-tokens": {
+      "get": {
+        "operationId": "cliTokens",
+        "summary": "The mixel command lines signed in to this account",
+        "responses": {
+          "200": {
+            "description": "Signed-in command lines",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliTokenList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/cli-tokens/revoke": {
+      "post": {
+        "operationId": "revokeCliToken",
+        "summary": "Sign one command line out",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeCliTokenBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Revoked. That CLI's next call gets 401."
+          },
+          "401": {
+            "description": "Not signed in",
             "content": {
               "application/json": {
                 "schema": {
@@ -216,142 +208,144 @@
               }
             }
           },
-          "401": {
-            "description": "The code was not accepted, or it expired",
+          "404": {
+            "description": "Already gone",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/registry/submissions": {
+      "post": {
+        "operationId": "createSubmission",
+        "summary": "Submit an app for review by commit",
+        "description": "For mixel publish. Takes a CLI token or a session. The repository must be one of the author's public GitHub repositories and the commit must be on it. app.json is read at that commit and checked with the same rules as mixel check (every problem in errors[]); a summary is required; the name can't change after publishing; an app that lists Python packages must commit uv.lock. Ten submissions an hour per account.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmissionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Submitted for review",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "repository_invalid, commit_invalid or message_invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the CLI token was revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "repository_not_yours",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
           },
           "409": {
-            "description": "The account appeared while the code was outstanding",
+            "description": "github_required or submission_pending",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "commit_not_pushed, manifest_* or sdk_* (with errors[]), lock_missing, manifest_version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
           },
           "429": {
-            "description": "Too many attempts",
+            "description": "rate_limited",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
           }
         }
-      }
-    },
-    "/api/v1/auth/register/resend": {
-      "post": {
-        "operationId": "resendRegistration",
-        "summary": "Send the code again",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResendBody"
-              }
+      },
+      "get": {
+        "operationId": "submissions",
+        "summary": "This account's submissions of one app, newest first",
+        "parameters": [
+          {
+            "name": "app",
+            "in": "query",
+            "required": true,
+            "description": "The app's name in app.json.",
+            "schema": {
+              "type": "string"
             }
           }
-        },
+        ],
         "responses": {
-          "202": {
-            "description": "Accepted. No hint about whether the address is waiting.",
+          "200": {
+            "description": "Submissions with checks and reviewer notes",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Pending"
+                  "$ref": "#/components/schemas/SubmissionList"
                 }
               }
             }
           },
           "400": {
-            "description": "The address is not an email",
+            "description": "app_required",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many attempts",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "The letter could not be sent",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/auth/login": {
-      "post": {
-        "operationId": "login",
-        "summary": "Open a session with email and password",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginBody"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Signed in",
-            "headers": {
-              "Set-Cookie": {
-                "description": "ox1_session",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Account"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
           },
           "401": {
-            "description": "Unknown email or wrong password",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many attempts",
+            "description": "Not signed in",
             "content": {
               "application/json": {
                 "schema": {
@@ -363,33 +357,34 @@
         }
       }
     },
-    "/api/v1/auth/desktop/handoff": {
-      "post": {
-        "operationId": "desktopHandoff",
-        "summary": "Turn the browser session into a one-time code for the desktop app",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DesktopHandoffBody"
-              }
+    "/api/v1/registry/submissions/{id}": {
+      "get": {
+        "operationId": "submission",
+        "summary": "One of this account's submissions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
-        },
+        ],
         "responses": {
           "200": {
-            "description": "The code can be redeemed once, and only with the same state",
+            "description": "The submission",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DesktopCode"
+                  "$ref": "#/components/schemas/SubmissionStatus"
                 }
               }
             }
           },
           "401": {
-            "description": "The browser is not signed in, or the state is not acceptable",
+            "description": "Not signed in",
             "content": {
               "application/json": {
                 "schema": {
@@ -397,37 +392,37 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Not one of yours",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/api/v1/auth/desktop/exchange": {
-      "post": {
-        "operationId": "desktopExchange",
-        "summary": "Redeem a desktop code for a session token",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DesktopExchangeBody"
-              }
-            }
-          }
-        },
+    "/api/v1/registry/catalog": {
+      "get": {
+        "operationId": "appCatalog",
+        "summary": "Apps accepted into the registry",
         "responses": {
           "200": {
-            "description": "A new session for the desktop app",
+            "description": "Accepted apps",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DesktopSession"
+                  "$ref": "#/components/schemas/CatalogList"
                 }
               }
             }
           },
           "401": {
-            "description": "The code is wrong, spent, or the state does not match",
+            "description": "Sign in is required",
             "content": {
               "application/json": {
                 "schema": {
@@ -435,17 +430,6 @@
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/auth/logout": {
-      "post": {
-        "operationId": "logout",
-        "summary": "Forget the session",
-        "responses": {
-          "204": {
-            "description": "Signed out"
           }
         }
       }
@@ -465,198 +449,528 @@
           }
         }
       },
-      "Account": {
+      "Me": {
+        "type": "object",
+        "required": [
+          "status",
+          "waitlist",
+          "terms",
+          "founding"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "waitlisted",
+              "approved"
+            ]
+          },
+          "terms": {
+            "$ref": "#/components/schemas/TermsStanding"
+          },
+          "founding": {
+            "type": "object",
+            "description": "The account against the launch week's founding price",
+            "required": [
+              "eligible",
+              "until",
+              "lastDay"
+            ],
+            "properties": {
+              "eligible": {
+                "type": "boolean",
+                "description": "This account gets Plus at the founding price (the same as Billing.founding and PlanAccess.founding)"
+              },
+              "until": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "The cutoff, an instant; null until sign-up opens"
+              },
+              "lastDay": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date",
+                "description": "The cutoff's last day in Italy (\"2026-11-18\"); null until sign-up opens"
+              }
+            }
+          },
+          "waitlist": {
+            "description": "Set while waitlisted; null once approved",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "position",
+                  "joinedAt"
+                ],
+                "properties": {
+                  "position": {
+                    "type": "integer",
+                    "description": "The place in line, 1 is next"
+                  },
+                  "joinedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "TermsStanding": {
+        "type": "object",
+        "description": "The account against the Terms of Service. Show the step while required is true.",
+        "required": [
+          "current",
+          "accepted",
+          "acceptedAt",
+          "required"
+        ],
+        "properties": {
+          "current": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The version in force (\"1\" for the beta, \"2\" from paid launch); null when this cloud has no Terms"
+          },
+          "accepted": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The latest version the account agreed to; null if it never agreed"
+          },
+          "acceptedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When it agreed to that version"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "True until the account agrees to the version in force. The desktop sign-in answers 409 terms_required meanwhile"
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "description": "A refusal the CLI prints as message, then fix (or doc_url). Manifest refusals list every problem in errors.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ProblemDetail"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProblemDetail"
+            }
+          }
+        }
+      },
+      "ProblemDetail": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "param": {
+            "type": "string"
+          },
+          "fix": {
+            "type": "string"
+          },
+          "doc_url": {
+            "type": "string"
+          }
+        }
+      },
+      "CliLoginBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "client": {
+            "type": "string",
+            "description": "What signs in, shown to the person, like \"mixel 0.3.0\"."
+          }
+        }
+      },
+      "CliDevice": {
+        "type": "object",
+        "required": [
+          "device_code",
+          "user_code",
+          "verification_url",
+          "interval",
+          "expires_in"
+        ],
+        "properties": {
+          "device_code": {
+            "type": "string"
+          },
+          "user_code": {
+            "type": "string",
+            "example": "CALM-RIVER-42"
+          },
+          "verification_url": {
+            "type": "string"
+          },
+          "interval": {
+            "type": "integer"
+          },
+          "expires_in": {
+            "type": "integer"
+          }
+        }
+      },
+      "CliPollBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "device_code"
+        ],
+        "properties": {
+          "device_code": {
+            "type": "string"
+          }
+        }
+      },
+      "CliToken": {
+        "type": "object",
+        "required": [
+          "token",
+          "account"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "account": {
+            "type": "object",
+            "required": [
+              "email"
+            ],
+            "properties": {
+              "email": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "CliTokenList": {
+        "type": "object",
+        "required": [
+          "tokens"
+        ],
+        "properties": {
+          "tokens": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "label",
+                "createdAt",
+                "lastUsedAt",
+                "expiresAt"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "lastUsedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "expiresAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      },
+      "RevokeCliTokenBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "SubmissionBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "repository",
+          "commit"
+        ],
+        "properties": {
+          "repository": {
+            "type": "string",
+            "example": "github.com/owner/repo"
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      },
+      "SubmissionCreated": {
         "type": "object",
         "required": [
           "id",
-          "email"
+          "app",
+          "version",
+          "status",
+          "url"
         ],
         "properties": {
           "id": {
             "type": "string",
             "format": "uuid"
           },
-          "email": {
-            "type": "string",
-            "format": "email"
-          }
-        }
-      },
-      "Pending": {
-        "type": "object",
-        "required": [
-          "status"
-        ],
-        "properties": {
+          "app": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
           "status": {
             "type": "string",
-            "const": "pending"
-          }
-        }
-      },
-      "RegisterBody": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "email"
-        ],
-        "properties": {
-          "email": {
-            "type": "string",
-            "format": "email",
-            "maxLength": 254
-          }
-        }
-      },
-      "CodeAccepted": {
-        "type": "object",
-        "required": [
-          "proof"
-        ],
-        "properties": {
-          "proof": {
+            "enum": [
+              "pending"
+            ]
+          },
+          "url": {
             "type": "string"
           }
         }
       },
-      "VerifyBody": {
+      "SubmissionList": {
         "type": "object",
-        "additionalProperties": false,
         "required": [
-          "email",
-          "code"
+          "submissions"
         ],
         "properties": {
-          "email": {
-            "type": "string",
-            "format": "email"
-          },
-          "code": {
-            "type": "string",
-            "pattern": "^[0-9]{6}$"
+          "submissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubmissionStatus"
+            }
           }
         }
       },
-      "PasswordBody": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "email",
-          "proof",
-          "password",
-          "passwordConfirm"
-        ],
-        "properties": {
-          "email": {
-            "type": "string",
-            "format": "email"
-          },
-          "proof": {
-            "type": "string"
-          },
-          "password": {
-            "type": "string",
-            "minLength": 8,
-            "maxLength": 128
-          },
-          "passwordConfirm": {
-            "type": "string",
-            "minLength": 8,
-            "maxLength": 128
-          }
-        }
-      },
-      "ResendBody": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "email"
-        ],
-        "properties": {
-          "email": {
-            "type": "string",
-            "format": "email"
-          }
-        }
-      },
-      "DesktopHandoffBody": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "state"
-        ],
-        "properties": {
-          "state": {
-            "type": "string",
-            "minLength": 32,
-            "maxLength": 128
-          }
-        }
-      },
-      "DesktopCode": {
+      "SubmissionStatus": {
         "type": "object",
         "required": [
-          "code"
-        ],
-        "properties": {
-          "code": {
-            "type": "string"
-          }
-        }
-      },
-      "DesktopExchangeBody": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "code",
-          "state"
-        ],
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "state": {
-            "type": "string",
-            "minLength": 32,
-            "maxLength": 128
-          }
-        }
-      },
-      "DesktopSession": {
-        "type": "object",
-        "required": [
-          "token",
           "id",
-          "email"
+          "app",
+          "version",
+          "status",
+          "created",
+          "commit",
+          "checks",
+          "notes"
         ],
         "properties": {
-          "token": {
-            "type": "string"
-          },
           "id": {
             "type": "string"
           },
-          "email": {
+          "app": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "status": {
             "type": "string",
-            "format": "email"
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected"
+            ]
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "commit": {
+            "type": "string"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "ok",
+                "message"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "ok": {
+                  "type": "boolean"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "author",
+                "body",
+                "created"
+              ],
+              "properties": {
+                "author": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "created": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
           }
         }
       },
-      "LoginBody": {
+      "CatalogList": {
         "type": "object",
-        "additionalProperties": false,
         "required": [
-          "email",
-          "password"
+          "apps"
         ],
         "properties": {
-          "email": {
-            "type": "string",
-            "format": "email"
-          },
-          "password": {
-            "type": "string",
-            "maxLength": 128
+          "apps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "appId",
+                "displayName",
+                "version",
+                "owner",
+                "repository",
+                "github",
+                "commit",
+                "sponsored",
+                "featured",
+                "official",
+                "downloads",
+                "tags",
+                "shortDescription",
+                "longDescription"
+              ],
+              "properties": {
+                "appId": {
+                  "type": "string"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repository": {
+                  "type": "string"
+                },
+                "github": {
+                  "type": "string"
+                },
+                "commit": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$",
+                  "description": "The reviewed commit. The desktop installs exactly this commit."
+                },
+                "sponsored": {
+                  "type": "boolean"
+                },
+                "featured": {
+                  "type": "boolean",
+                  "description": "True when the committee is featuring this app. Installed copies stay off the Featured page."
+                },
+                "official": {
+                  "type": "boolean",
+                  "description": "True when the GitHub owner is the 0x1audio account."
+                },
+                "downloads": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Accounts that installed this app, plus desktops that installed it while signed out."
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "shortDescription": {
+                  "type": "string"
+                },
+                "longDescription": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },

@@ -218,7 +218,9 @@ def app_json_doc(c: dict) -> str:
 
 
 def errors_doc(c: dict) -> str:
-    titles = {"check": "From mixel check (and the registry)", "run": "When an action runs (pages see these as OxError.code)", "cli": "From the mixel command"}
+    titles = {"check": "From mixel check (and the registry)", "run": "When an action runs (pages see these as OxError.code)", "cli": "From the mixel command",
+              "library": "From the person's Library (mixel mcp, ox1audio.local and Mixel's own assistant tools)",
+              "registry": "From the registry and the cloud (mixel login, publish and status)"}
     lines = ["# Errors", "", "Every error has a code, what happened, and the fix. The message you see names the exact fix for your case; this page is the index. Codes marked (warning) don't fail `mixel check`, but `--strict` and publish refuse them too.", ""]
     for area, codes in c["errors"].items():
         lines += [f"## {titles[area]}", "", "| Code | Means | Usual fix |", "| --- | --- | --- |"]
@@ -573,6 +575,14 @@ def _signature(source: str, name: str) -> str:
     return shown + (f" ({kind})" if kind and "{" not in kind and len(kind) <= 70 else "")
 
 
+def _clip(text: str, limit: int) -> str:
+    """At most ``limit`` characters, cut after a whole word, never inside one ("drawn as an outli")."""
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1].rsplit(" ", 1)[0].rstrip(",;:—- ")
+    return f"{cut}…"
+
+
 def ui_index() -> dict | None:
     """Components an app page may use (DESIGN.md › Components, with their props) and the colour tokens."""
     import re
@@ -600,7 +610,7 @@ def ui_index() -> dict | None:
         for name in names:
             if name in skip or name not in exports:
                 continue
-            components.append({"name": name, "group": group, "props": _signature(exports[name].read_text(), name), "use": use[:160]})
+            components.append({"name": name, "group": group, "props": _signature(exports[name].read_text(), name), "use": _clip(use, 160)})
     # Exported functions that go with the listed components (waveformFrom for Waveform), with their signatures.
     files = {exports[item["name"]] for item in components}
     helpers = []

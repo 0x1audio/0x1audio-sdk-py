@@ -15,6 +15,14 @@ SRC = str(Path(ox.__file__).resolve().parents[1])
 
 # (snippet, the code it must get, a word the message must name)
 REFUSED = [
+    # the SDK's tools for scripts outside Mixel: an app uses ox.library and its permission
+    ("from ox1audio.local import Mixel", "banned_api", "ox1audio.local"),
+    ("from ox1audio import local", "banned_api", "ox1audio.local"),
+    ("import ox1audio.local", "banned_api", "ox1audio.local"),
+    ("import ox1audio as ox\nox.local.Mixel().search('snare')", "banned_api", "ox1audio.local"),
+    ("from ox1audio.api import connect", "banned_api", "ox1audio.api"),
+    ("from ox1audio.mcp import library_search", "banned_api", "ox1audio.mcp"),
+    ("from ox1audio.cli import running", "banned_api", "ox1audio.cli"),
     # running programs
     ("import subprocess", "banned_api", "subprocess"),
     ("import subprocess as sp\nsp.run(['ls'])", "banned_api", "subprocess"),
@@ -127,6 +135,7 @@ ALLOWED = [
     "x = getattr(obj, 'name', None)",
     "import os\ngetattr(os, 'sep')",
     "import shutil\nshutil.which('ls')",
+    "import ox1audio as ox\nox.progress(0.5, 'half')\nox.library.items()",
 ]
 
 
