@@ -93,7 +93,7 @@ class CloudTest(unittest.TestCase):
     def test_an_error_status_raises_a_mixel_api_error_with_every_problem(self):
         self.route("GET", "/api/v1/me", (401, {"error": {"code": "unauthenticated", "message": "Sign in to continue."}}))
         self.route("POST", "/api/v1/registry/submissions", (400, {
-            "error": {"code": "manifest_invalid", "message": "app.json has 2 problems.", "fix": "mixel check", "doc_url": "https://developers.0x1audio.com/errors#manifest_invalid"},
+            "error": {"code": "manifest_invalid", "message": "app.json has 2 problems.", "fix": "mixel check", "doc_url": "https://docs.0x1audio.com/errors#manifest_invalid"},
             "errors": [{"code": "manifest_summary", "message": "summary is missing."}, {"code": "sdk_missing", "message": "app.json has no sdk range.", "param": "sdk"}],
         }))
         cloud = connect("mxl_secret", base_url=self.url)
@@ -105,7 +105,7 @@ class CloudTest(unittest.TestCase):
         with self.assertRaises(MixelApiError) as refused:
             create_submission.sync(client=cloud, body=SubmissionBody(repository="ada/app", commit="0" * 40))
         self.assertEqual(refused.exception.fix, "mixel check")
-        self.assertEqual(refused.exception.doc_url, "https://developers.0x1audio.com/errors#manifest_invalid")
+        self.assertEqual(refused.exception.doc_url, "https://docs.0x1audio.com/errors#manifest_invalid")
         self.assertEqual([problem["code"] for problem in refused.exception.errors], ["manifest_summary", "sdk_missing"])
         self.assertEqual(len([seen for seen in self.httpd.seen if seen[0] == "POST"]), 1, "a POST is never sent twice")
 
