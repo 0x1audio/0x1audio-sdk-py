@@ -8,9 +8,9 @@ export const manifestSchema = "https://0x1audio.com/schema/app/v1.json"
 export type ErrorCode = "bad_input" | "problem" | "cancelled" | "crashed" | "timeout" | "permission_denied" | "permission_undeclared" | "unavailable"
 export const errorCodes: readonly ErrorCode[] = ["bad_input", "problem", "cancelled", "crashed", "timeout", "permission_denied", "permission_undeclared", "unavailable"]
 
-export type PermissionCode = "files" | "library" | "data" | "gpu" | "network"
-export const permissionCodes: readonly PermissionCode[] = ["files", "library", "data", "gpu", "network"]
-export const permissionText: Record<PermissionCode, string> = {"files": "Read and write files you pick", "library": "Add to your Library", "data": "Keep its own files", "gpu": "Use the graphics chip", "network": "Use the network"}
+export type PermissionCode = "files" | "library" | "library-read" | "data" | "gpu" | "network"
+export const permissionCodes: readonly PermissionCode[] = ["files", "library", "library-read", "data", "gpu", "network"]
+export const permissionText: Record<PermissionCode, string> = {"files": "Read and write files you pick", "library": "Add to your Library", "library-read": "Read your Library", "data": "Keep its own files", "gpu": "Use the graphics chip", "network": "Use the network"}
 
 export type Control = "files" | "folder" | "choice" | "text" | "number" | "slider" | "toggle"
 

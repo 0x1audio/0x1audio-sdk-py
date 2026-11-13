@@ -81,7 +81,11 @@
         },
         "library": {
           "$ref": "#/$defs/reason",
-          "description": "Add sounds to the person's Library."
+          "description": "Add sounds to the person's Library. It doesn't let the app list or open the sounds already there."
+        },
+        "library-read": {
+          "$ref": "#/$defs/reason",
+          "description": "List the person's sounds on the app's page (names and facts, never paths) and open the ones they pick. Off until the person allows it."
         },
         "data": {
           "$ref": "#/$defs/reason",

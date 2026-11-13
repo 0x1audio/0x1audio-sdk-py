@@ -348,7 +348,9 @@ def _sources(folder: Path, suffixes: set[str], skip: set[str]):
 _page_uses = {
     "data": re.compile(r"\box\.data\.(list|read|readText|write|remove)\("),
     "files": re.compile(r"\box\.files\.(pick|fromDrop|read|reveal)\(|\box\.library\.file\("),
-    "library": re.compile(r"\box\.library\.(list|add|file|onChange)\("),
+    "library": re.compile(r"\box\.library\.add\("),
+    # Listing or opening the person's own sounds is its own permission, apart from adding to them.
+    "library-read": re.compile(r"\box\.library\.(list|file)\(|<(LibraryDialog|LibraryBrowser)\b"),
 }
 
 
@@ -486,11 +488,11 @@ def _lock(folder: Path) -> list[Finding]:
 
 
 def _why_used(code: str) -> str:
-    return {"files": "a Files or Folder control", "library": "it returns or adds sounds", "data": "it uses ox.data"}.get(code, code)
+    return {"files": "a Files or Folder control", "library": "it returns or adds sounds", "library-read": "its page lists or opens sounds in the Library", "data": "it uses ox.data"}.get(code, code)
 
 
 def _reason(code: str) -> str:
-    return {"files": "Open the songs you choose.", "library": "Save the results to your Library.", "data": "Remember your settings on this computer.", "gpu": "Use your graphics chip to split songs faster."}.get(code, "Why the app needs it.")
+    return {"files": "Open the songs you choose.", "library": "Save the results to your Library.", "library-read": "Choose sounds from your Library to work on.", "data": "Remember your settings on this computer.", "gpu": "Use your graphics chip to split songs faster."}.get(code, "Why the app needs it.")
 
 
 _models = re.compile(r"^\s*(import|from)\s+(torch|onnxruntime)\b", re.M)
