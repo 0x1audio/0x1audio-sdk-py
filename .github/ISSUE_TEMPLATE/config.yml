@@ -1,0 +1,9 @@
+# Only links that answer today. See CONTRIBUTING.md for where questions go.
+blank_issues_enabled: false
+contact_links:
+  - name: A security problem
+    url: https://0x1audio.com/security
+    about: Please tell us privately, never in a public issue. This page says how.
+  - name: Something in Mixel itself, your account or Plus
+    url: https://0x1audio.com/help
+    about: Mixel isn't developed in this repository. In Mixel, choose Help, then Send Feedback, or write to support@0x1audio.com.

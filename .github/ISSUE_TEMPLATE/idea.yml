@@ -1,0 +1,33 @@
+name: An idea
+description: A change to ox1audio or the mixel command you'd like, before anyone writes the code.
+labels: ["idea", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Open this before you write code for a bigger change, so we can agree on the shape first.
+        We add to the SDK when a real app or script needs it. The more exact the thing you're building, the easier it is to say yes.
+  - type: textarea
+    id: job
+    attributes:
+      label: What you're trying to do
+      description: The task, in a music maker's or a developer's words. Not the solution yet.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today instead
+    validations:
+      required: true
+  - type: textarea
+    id: shape
+    attributes:
+      label: What it could look like
+      description: Optional. A control, a call, a line of output.
+  - type: checkboxes
+    id: build
+    attributes:
+      label: Would you build it?
+      options:
+        - label: I'd like to send the pull request myself.

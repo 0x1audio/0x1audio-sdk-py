@@ -14,6 +14,7 @@ Tell us what you found, the steps to reproduce it, what an attacker could do wit
 ## What's in scope
 
 - **The `mixel` command:** `new`, `check`, `test` and `dev`, for example a way to make `mixel check` pass an app that breaks the rules review relies on.
+- **Permissions:** code that reads the Library, the network or files without the matching line in `app.json`, and that `mixel check --strict` doesn't flag.
 - **The MCP server** and the docs it serves, including anything that would tell someone to install a package we didn't name.
 - **The cloud client:** how it sends and keeps tokens.
 

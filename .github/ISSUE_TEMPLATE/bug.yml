@@ -1,0 +1,58 @@
+name: A bug
+description: Something in ox1audio or the mixel command doesn't work.
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for telling us. A security problem doesn't belong here: please use [0x1audio.com/security](https://0x1audio.com/security) so it stays private.
+  - type: textarea
+    id: did
+    attributes:
+      label: What you did
+      description: The steps, so we can do the same.
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: mixel doctor
+      description: Run `mixel doctor` and paste what it prints. It lists your versions and what's missing.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part
+      options:
+        - An app's Python (ox.action, ox.audio, ox.test)
+        - The mixel command (new, check, test, run, dev, publish)
+        - mixel mcp
+        - Scripts (ox1audio.local)
+        - The cloud client
+        - The docs or an error message
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Error text
+      description: The full error, with its `fix:` and `docs:` lines. Remove anything private, such as folder names.
+      render: text
