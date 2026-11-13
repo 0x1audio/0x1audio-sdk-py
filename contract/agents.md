@@ -69,7 +69,7 @@ class ConvertTest(unittest.TestCase):
   "accent": "#20b4c4"
 }
 ```
-- Permissions are binding: {{permission_list}}, `network` as `{"why": "…", "hosts": ["example.com"]}`. Ask only for what the code uses. Each reason is one sentence (12–120 characters) telling the person why.
+- Permissions are binding: {{permission_list}}, `network` as `{"why": "…", "hosts": ["example.com"]}`. Ask only for what the code uses. Each reason: one sentence (12–120 chars) saying why.
 - Optional: `icon` (a square `.svg`/`.png` in the app), `window` (`{"width", "height", "minWidth", "minHeight"}`), `tags` (up to 5), `license` (SPDX), `page` (below).
 - Raise `version` before each release. Never change `name`.
 
@@ -85,7 +85,7 @@ import { ActionForm } from "@0x1audio/design-system"
 export const App = () => <ActionForm action="convert" />   // the form Mixel draws; build around it
 // your own controls: await ox.run("convert", { files, format }, { onProgress: (f, label) => {}, onEvent: (name, body) => {}, signal })
 ```
-Page API: `ox.run`, `ox.actions`, `ox.files.pick / fromDrop / read / reveal`, `ox.library.list / add / file / onChange`, `ox.data.*`, `ox.app.open`. Errors are `OxError` with `.code` (`cancelled` after Stop, with `.kept`). `ox.emit("partial", body)` in Python reaches `onEvent`. Use design-system components and tokens only, no hex colours. Mixel sets `.dark` on `<html>`: check both.
+Page API: `ox.run`, `ox.actions`, `ox.files.pick / fromDrop / read / reveal`, `ox.library.list / add / file / onChange`, `ox.data.*`, `ox.app.open`. Errors are `OxError` with `.code` (`cancelled` after Stop, with `.kept`). `ox.emit("partial", body)` in Python reaches `onEvent`. Design-system components and tokens only, no hex colours. Mixel sets `.dark` on `<html>`: check both.
 
 ## Words (what the person sees)
 Say what it does for a musician: song, sound, file, folder, Library. Never: worker, manifest, SDK, ffmpeg. Sentence case. Buttons are verbs. No exclamation marks. Errors say what happened, then what to do.

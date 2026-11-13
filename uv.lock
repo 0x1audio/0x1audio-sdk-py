@@ -320,6 +320,7 @@ dependencies = [
     { name = "attrs" },
     { name = "httpx" },
     { name = "imageio-ffmpeg" },
+    { name = "python-dateutil" },
 ]
 
 [package.optional-dependencies]
@@ -335,6 +336,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "imageio-ffmpeg", specifier = ">=0.5" },
     { name = "openapi-python-client", marker = "extra == 'generate'", specifier = "==0.28.3" },
+    { name = "python-dateutil", specifier = ">=2.8" },
     { name = "pyyaml", marker = "extra == 'generate'", specifier = ">=6" },
     { name = "ruff", marker = "extra == 'generate'", specifier = ">=0.8" },
 ]

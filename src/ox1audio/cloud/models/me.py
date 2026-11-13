@@ -11,6 +11,7 @@ from ..models.me_status import MeStatus
 if TYPE_CHECKING:
     from ..models.me_founding import MeFounding
     from ..models.me_waitlist_type_1 import MeWaitlistType1
+    from ..models.notices import Notices
     from ..models.terms_standing import TermsStanding
 
 
@@ -22,13 +23,18 @@ class Me:
     """
     Attributes:
         status (MeStatus):
-        terms (TermsStanding): The account against the Terms of Service. Show the step while required is true.
+        terms (TermsStanding): The account against the Terms of Service. Show the step while required is true. Two
+            versions are kept apart: current, the one in force (the step offers it, each checkout records it), and minimum,
+            the oldest one an account can have agreed to and still use the cloud.
+        notices (Notices): The emails about Mixel itself this account can turn off (W10). Purchase, withdrawal and
+            account emails always go
         founding (MeFounding): The account against the launch week's founding price
         waitlist (MeWaitlistType1 | None): Set while waitlisted; null once approved
     """
 
     status: MeStatus
     terms: TermsStanding
+    notices: Notices
     founding: MeFounding
     waitlist: MeWaitlistType1 | None
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -39,6 +45,8 @@ class Me:
         status = self.status.value
 
         terms = self.terms.to_dict()
+
+        notices = self.notices.to_dict()
 
         founding = self.founding.to_dict()
 
@@ -54,6 +62,7 @@ class Me:
             {
                 "status": status,
                 "terms": terms,
+                "notices": notices,
                 "founding": founding,
                 "waitlist": waitlist,
             }
@@ -65,12 +74,15 @@ class Me:
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         from ..models.me_founding import MeFounding
         from ..models.me_waitlist_type_1 import MeWaitlistType1
+        from ..models.notices import Notices
         from ..models.terms_standing import TermsStanding
 
         d = dict(src_dict)
         status = MeStatus(d.pop("status"))
 
         terms = TermsStanding.from_dict(d.pop("terms"))
+
+        notices = Notices.from_dict(d.pop("notices"))
 
         founding = MeFounding.from_dict(d.pop("founding"))
 
@@ -92,6 +104,7 @@ class Me:
         me = cls(
             status=status,
             terms=terms,
+            notices=notices,
             founding=founding,
             waitlist=waitlist,
         )

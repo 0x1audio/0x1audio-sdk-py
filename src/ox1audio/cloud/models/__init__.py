@@ -16,6 +16,7 @@ from .me import Me
 from .me_founding import MeFounding
 from .me_status import MeStatus
 from .me_waitlist_type_1 import MeWaitlistType1
+from .notices import Notices
 from .problem import Problem
 from .problem_detail import ProblemDetail
 from .revoke_cli_token_body import RevokeCliTokenBody
@@ -46,6 +47,7 @@ __all__ = (
     "MeFounding",
     "MeStatus",
     "MeWaitlistType1",
+    "Notices",
     "Problem",
     "ProblemDetail",
     "RevokeCliTokenBody",

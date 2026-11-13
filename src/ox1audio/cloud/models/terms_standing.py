@@ -13,21 +13,34 @@ T = TypeVar("T", bound="TermsStanding")
 
 @_attrs_define
 class TermsStanding:
-    """The account against the Terms of Service. Show the step while required is true.
+    """The account against the Terms of Service. Show the step while required is true. Two versions are kept apart:
+    current, the one in force (the step offers it, each checkout records it), and minimum, the oldest one an account can
+    have agreed to and still use the cloud.
 
-    Attributes:
-        current (None | str): The version in force ("1" for the beta, "2" from paid launch); null when this cloud has no
-            Terms
-        accepted (None | str): The latest version the account agreed to; null if it never agreed
-        accepted_at (datetime.datetime | None): When it agreed to that version
-        required (bool): True until the account agrees to the version in force. The desktop sign-in answers 409
-            terms_required meanwhile
+        Attributes:
+            current (None | str): The version in force ("1" for the beta, "2" from paid launch): the step asks for it, and a
+                checkout records it as the version the buyer agreed to on the Choose sheet. Null when this cloud has no Terms
+            accepted (None | str): The latest version the account agreed to in the step; null if it never agreed there. An
+                agreement given with a purchase is kept with the purchase (the export's billing), not here
+            accepted_at (datetime.datetime | None): When it agreed to that version
+            required (bool): True until the account has agreed to a version that's enough to use the cloud (minimum or
+                later, in the step or with a purchase), having been through the step once. The desktop sign-in and mixel login
+                answer terms_required meanwhile
+            minimum (None | str): The oldest version that lets an account use the cloud now: TERMS_REQUIRED_VERSION, else
+                current, and current from requiredFrom. Null when this cloud has no Terms
+            required_from (datetime.datetime | None): When current becomes the minimum (TERMS_REQUIRED_FROM): a material
+                change takes effect then, 30 days or more after its email (Terms §14). Null when no such change is set
+            review (bool): A material change is on its way (before requiredFrom) and this account hasn't agreed to current
+                yet: offer "Review the new Terms" with Not now. It becomes required at requiredFrom
     """
 
     current: None | str
     accepted: None | str
     accepted_at: datetime.datetime | None
     required: bool
+    minimum: None | str
+    required_from: datetime.datetime | None
+    review: bool
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -45,6 +58,17 @@ class TermsStanding:
 
         required = self.required
 
+        minimum: None | str
+        minimum = self.minimum
+
+        required_from: None | str
+        if isinstance(self.required_from, datetime.datetime):
+            required_from = self.required_from.isoformat()
+        else:
+            required_from = self.required_from
+
+        review = self.review
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -53,6 +77,9 @@ class TermsStanding:
                 "accepted": accepted,
                 "acceptedAt": accepted_at,
                 "required": required,
+                "minimum": minimum,
+                "requiredFrom": required_from,
+                "review": review,
             }
         )
 
@@ -93,11 +120,38 @@ class TermsStanding:
 
         required = d.pop("required")
 
+        def _parse_minimum(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        minimum = _parse_minimum(d.pop("minimum"))
+
+        def _parse_required_from(data: object) -> datetime.datetime | None:
+            if data is None:
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                required_from_type_0 = isoparse(data)
+
+                return required_from_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(datetime.datetime | None, data)
+
+        required_from = _parse_required_from(d.pop("requiredFrom"))
+
+        review = d.pop("review")
+
         terms_standing = cls(
             current=current,
             accepted=accepted,
             accepted_at=accepted_at,
             required=required,
+            minimum=minimum,
+            required_from=required_from,
+            review=review,
         )
 
         terms_standing.additional_properties = d

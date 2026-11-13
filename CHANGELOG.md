@@ -34,8 +34,14 @@ Every release of `ox1audio` (the Python SDK and the `mixel` command), newest fir
 - `mixel mcp`: `library_search` takes `offset` (the reply's `next`) for the next page, as Mixel's own tools do. When Mixel takes too long, the code is `timeout`, not `library_search_off`.
 - The errors index (`mixel docs errors`, `mixel://errors/{code}`, the docs site) lists the Library's codes (`not_ready`, `unknown_id`, `too_many`, `crates_off`, `unknown_tool`, `too_long`, `mixel_error`) and the registry's (`github_required`, `repository_not_yours`, `commit_not_pushed`, `submission_pending`, `waitlisted`, `terms_required`, …), so every `doc_url` the cloud sends lands on a row.
 
+- **The `library-read` permission (Mixel 0.1.23).** `library` adds to the Library; `library-read` lists it and opens a sound the person picks. `app.json`'s schema, `mixel check`, `mixel docs permissions` and AGENTS.md know both.
+- `ox1audio.cloud` follows today's API: `Me` has `notices`, and `TermsStanding` has `minimum`, `required_from` and `review`.
+- `python-dateutil` is a dependency: `ox1audio.cloud` imports it, and an install without the development extras failed on `import ox1audio.cloud`.
+- Package metadata for PyPI (the README as the project page, links, classifiers), CI on every push, and a wheel attached to every GitHub release, for installs before PyPI.
+
 ### Changed
 
+- **A page that lists or opens Library sounds needs `"library-read"` in `app.json`.** `mixel check` reports `permission_undeclared` for `ox.library.list`, `ox.library.file`, `LibraryDialog` or `LibraryBrowser` without it, and no longer counts them as `library`. An app that only returns or adds sounds changes nothing.
 - `library_search_off` says where the switch is now: Settings › Your assistant. `desktop_unavailable` says to reopen Mixel after turning on Developer mode, because it takes effect then.
 - A design-system component's one-line use, in `ui_components`, is cut after a whole word.
 - **`ox1audio.cloud` now matches the Mixel cloud as it is.** The calls are `health`, `me`, `cli_login`, `cli_login_poll`, `cli_tokens`, `revoke_cli_token`, `app_catalog`, `create_submission`, `submissions` and `submission`.

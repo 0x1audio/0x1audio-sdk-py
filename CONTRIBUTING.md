@@ -18,7 +18,7 @@ cd 0x1audio-sdk-py
 uv sync --extra generate
 ```
 
-`contract/` is the one source for the rules Mixel, the SDKs and the desktop share. Change it there, then run `uv run python contract/generate.py` to rewrite every generated file, including the copies in the sibling checkouts (`0x1audio-sdk-ts`, `0x1audio-cloud` and the official apps). Never edit a generated file by hand; each one says so at the top.
+`contract/` is the one source for the rules Mixel, the SDKs and the desktop share. Change it there, then run `uv run python contract/generate.py` to rewrite every generated file, including the copies in the sibling checkouts when they are there (`0x1audio-sdk-ts`, `0x1audio-cloud` and the official apps). `--only <part of a path>` keeps it to the files whose path has that text. Never edit a generated file by hand; each one says so at the top.
 
 ## Run the checks
 
