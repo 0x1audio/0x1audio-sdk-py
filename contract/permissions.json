@@ -7,8 +7,13 @@
   },
   "library": {
     "text": "Add to your Library",
-    "uses": "returning ox.sound, ox.midi or ox.file; ox.library.add; the page's ox.library",
+    "uses": "returning ox.sound, ox.midi or ox.file; ox.library.add in Python and on the page. It never lists or opens the person's other sounds",
     "short": "returning sounds"
+  },
+  "library-read": {
+    "text": "Read your Library",
+    "uses": "the page's ox.library.list and ox.library.file, and LibraryDialog: names, length, tempo and key, no paths; a file only for a sound the person picks or the app added",
+    "short": ""
   },
   "data": {
     "text": "Keep its own files",

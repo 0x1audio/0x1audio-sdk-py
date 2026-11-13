@@ -10,7 +10,7 @@
 - [app.json]({{docs}}/reference/app-json.md): every field and its rule
 - [Errors]({{docs}}/errors.md): every code mixel, Mixel and the registry use, with its fix
 - [CLI]({{docs}}/reference/cli.md): mixel commands and flags
-- [Permissions]({{docs}}/reference/permissions.md): files, library, data, network
+- [Permissions]({{docs}}/reference/permissions.md): files, library, library-read, data, network
 
 ## Optional
 - [Protocol]({{docs}}/reference/protocol.md): how Mixel talks to an app's Python

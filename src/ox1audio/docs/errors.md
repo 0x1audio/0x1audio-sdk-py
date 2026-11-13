@@ -27,7 +27,7 @@ Every error has a code, what happened, and the fix. The message you see names th
 | `permission_undeclared` | The code uses a permission app.json doesn't ask for. | mixel check --fix adds it; then write the reason in your own words. |
 | `permission_unused` (warning) | app.json asks for a permission the code doesn't use. | Remove it, so people aren't asked for more than the app needs. |
 | `template_words` (warning) | The summary or a permission reason is still mixel new's words about converting, in an app that does something else. | Write what your app does, and why it needs each permission, in your own words. |
-| `permission_unknown` | Not a permission. They are files, library, data and network. | Use one of files, library, data, network. |
+| `permission_unknown` | Not a permission. They are files, library, library-read, data, gpu and network. | Use one of files, library, library-read, data, gpu, network. |
 | `permission_reason` | A permission without a reason of 12 to 120 characters. | One sentence that tells the person why, like "Open the songs you choose." |
 | `network_hosts` | network without a list of hosts, or with the whole web, an IP or localhost. | "network": { "why": "Download the model once.", "hosts": ["github.com"] } |
 | `dependency_missing` | The code imports a package pyproject.toml doesn't list, so Mixel won't install it. | Add it to pyproject.toml › [project].dependencies. |
