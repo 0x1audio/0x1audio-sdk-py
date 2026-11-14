@@ -102,7 +102,12 @@ class PageScaffoldTest(unittest.TestCase):
             self.assertEqual(json.loads((app / "app.json").read_text())["page"], "dist/index.html")
             package = json.loads((app / "package.json").read_text())
             self.assertEqual(package["license"], "Apache-2.0")
-            self.assertEqual(set(package["dependencies"]) >= {"@ox1audio/sdk", "@0x1audio/design-system", "react"}, True)
+            # Both come from npm by name and range, never from a folder beside the SDK.
+            self.assertEqual(package["dependencies"]["@ox1audio/sdk"], "^0.3.1")
+            self.assertEqual(package["dependencies"]["@ox1audio/design-system"], "^0.1.0")
+            self.assertIn("react", package["dependencies"])
+            self.assertIn('@import "@ox1audio/design-system/theme.css";', (app / "src" / "index.css").read_text())
+            self.assertNotIn("@0x1audio/", "".join(path.read_text() for path in app.rglob("*") if path.is_file() and path.suffix in {".ts", ".tsx", ".css", ".json", ".md"}))
             self.assertIn('base: "./"', (app / "vite.config.ts").read_text())
             self.assertIn('dedupe: ["react", "react-dom"]', (app / "vite.config.ts").read_text())
             self.assertIn('<ActionForm action="convert" />', (app / "src" / "App.tsx").read_text())
