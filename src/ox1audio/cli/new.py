@@ -86,11 +86,11 @@ import {{ defineConfig }} from "vite"
 // Mixel opens dist/index.html from disk: relative paths, and no crossorigin on file://.
 export default defineConfig({{
   plugins: [
-    react({{ exclude: /node_modules\\/(?!@0x1audio\\/design-system)/ }}),
+    react(),
     tailwindcss(),
     {{ name: "file-protocol", transformIndexHtml: (html) => html.replaceAll(" crossorigin", "") }},
   ],
-  // The design system may be linked from a checkout: one React for both.
+  // One React for the page and the design system.
   resolve: {{ dedupe: ["react", "react-dom"] }},
   base: "./",
   // One local bundle, read from disk: its size is fine.
@@ -114,7 +114,9 @@ export default defineConfig({{
 }}
 """,
     "src/index.css": """@import "tailwindcss";
-@import "@0x1audio/design-system/theme.css";
+@import "@ox1audio/design-system/theme.css";
+/* The built page is not a source: without this, the last build's classes leak into the next. */
+@source not "../dist";
 """,
     "src/main.tsx": """import {{ StrictMode }} from "react"
 import {{ createRoot }} from "react-dom/client"
@@ -129,7 +131,7 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>,
 )
 """,
-    "src/App.tsx": """import {{ ActionForm, PageHeader }} from "@0x1audio/design-system"
+    "src/App.tsx": """import {{ ActionForm, PageHeader }} from "@ox1audio/design-system"
 
 // The form Mixel would draw for the convert action. Build your own page around it,
 // or call ox.run("convert", {{ files, format }}) from "@ox1audio/sdk/page".
@@ -179,11 +181,8 @@ def command(args: list[str]) -> int:
 
 
 def page_packages() -> dict[str, str]:
-    """Where @ox1audio/sdk and @0x1audio/design-system come from. Until they are on npm (GAB-40),
-    a checkout next to this SDK (how Mixel's own apps build) is linked with file:."""
-    projects = Path(__file__).resolve().parents[4]
-    local = {"@ox1audio/sdk": projects / "0x1audio-sdk-ts", "@0x1audio/design-system": projects / "0x1audio-cloud" / "packages" / "design-system"}
-    return {name: f"file:{path}" if (path / "package.json").is_file() else "^0.3.0" for name, path in local.items()}
+    """The two packages a page builds with, from npm: the page SDK and Mixel's design system."""
+    return {"@ox1audio/sdk": "^0.3.1", "@ox1audio/design-system": "^0.1.0"}
 
 
 # The words about converting that an app must rewrite once it does something else (mixel check --strict).
