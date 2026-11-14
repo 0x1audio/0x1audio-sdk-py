@@ -77,10 +77,10 @@ class ConvertTest(unittest.TestCase):
 Python packages go in `pyproject.toml` › `[project].dependencies`, wheels only; Mixel installs only those (`mixel check --fix` adds what the code imports, then runs `uv sync`; commit uv.lock). numpy and scipy are fine. The SDK already has ffmpeg; don't add ffmpeg wrappers, pydub, or requests. Never commit models, songs or files over 5 MB.
 
 ## A page (only when the drawn form is not enough)
-`mixel new --page` adds one: Vite + React, built to `dist/index.html`. It uses `@0x1audio/design-system` and the same actions:
+`mixel new --page` adds one: Vite + React, built to `dist/index.html`. It uses `@ox1audio/design-system` and the same actions:
 ```tsx
 import { ox } from "@ox1audio/sdk/page"
-import { ActionForm } from "@0x1audio/design-system"
+import { ActionForm } from "@ox1audio/design-system"
 
 export const App = () => <ActionForm action="convert" />   // the form Mixel draws; build around it
 // your own controls: await ox.run("convert", { files, format }, { onProgress: (f, label) => {}, onEvent: (name, body) => {}, signal })

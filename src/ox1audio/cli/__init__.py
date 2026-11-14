@@ -75,7 +75,7 @@ COMMANDS = {
 GONE = {
     "eject": (
         "mixel eject is gone: a page builds around the same form Mixel draws.",
-        'add a Vite page that renders <ActionForm action="..."/> from @0x1audio/design-system, and set "page": "dist/index.html"',
+        'add a Vite page that renders <ActionForm action="..."/> from @ox1audio/design-system, and set "page": "dist/index.html"',
         "page",
     ),
 }

@@ -511,7 +511,7 @@ def go(c: dict) -> str:
 
 
 def _exports(ds: Path) -> dict[str, Path]:
-    """What @0x1audio/design-system exports, and the file each name comes from (src/index.ts)."""
+    """What @ox1audio/design-system exports, and the file each name comes from (src/index.ts)."""
     import re
 
     found: dict[str, Path] = {}
@@ -630,7 +630,7 @@ def ui_index() -> dict | None:
     theme = (ds / "src" / "theme.css").read_text()
     colours = sorted(set(re.findall(r"--color-([a-z-]+)\s*:", theme)))
     return {
-        "import": 'import { Button, ... } from "@0x1audio/design-system"',
+        "import": 'import { Button, ... } from "@ox1audio/design-system"',
         "rules": "Only these components and tokens below the hero; no hex colours; one filled Button per view; design empty, working, done and error states; check light and dark.",
         "components": components,
         "helpers": helpers,
