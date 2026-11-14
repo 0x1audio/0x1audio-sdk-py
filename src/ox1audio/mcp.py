@@ -249,7 +249,7 @@ def app_test(args: dict) -> dict:
 def ui_components(args: dict) -> dict:
     path = DOCS / "ui.json"
     if not path.is_file():
-        raise ToolError("unavailable", "This SDK was built without the design-system index.", "read DESIGN.md in @0x1audio/design-system")
+        raise ToolError("unavailable", "This SDK was built without the design-system index.", "read DESIGN.md in @ox1audio/design-system")
     index = json.loads(path.read_text())
     words = [word for word in re.findall(r"[a-z0-9]+", str(args.get("q") or "").lower()) if len(word) > 1]
     if words:
